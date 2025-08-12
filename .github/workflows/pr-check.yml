@@ -27,7 +27,7 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Build in Release mode (multi-target from csproj)
+      # Build in Release mode (net8.0, net9.0)
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
