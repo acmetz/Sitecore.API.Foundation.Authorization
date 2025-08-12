@@ -30,9 +30,13 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Build main library in Release mode (net8.0, net9.0)
-      - name: Build main library
-        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release --no-restore
+      # Build main library for net8.0
+      - name: Build main library (net8.0)
+        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net8.0 --no-restore
+
+      # Build main library for net9.0
+      - name: Build main library (net9.0)
+        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net9.0 --no-restore
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
