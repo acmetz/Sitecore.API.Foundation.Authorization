@@ -37,7 +37,7 @@ jobs:
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
         run: >
-          dotnet test --configuration Release --no-build \
+          dotnet test --configuration Release \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
