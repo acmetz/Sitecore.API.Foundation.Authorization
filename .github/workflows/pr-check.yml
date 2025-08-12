@@ -27,7 +27,7 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Build in Release mode (multi-target from csproj)
+      # Build in Release mode (net8.0, net9.0)
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
@@ -38,20 +38,5 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
-
-      # Convert coverage to cobertura format
-      - name: Convert coverage to cobertura
-        run: >
-          reportgenerator -reports:./TestResults/**/coverage.cobertura.xml \
-            -targetdir:./TestResults/CoverageReport \
-            -reporttypes:Cobertura
-        continue-on-error: true
-
-      # Upload coverage to Codecov (optional)
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./TestResults/CoverageReport/Cobertura.xml
-        continue-on-error: true
 
 # End of workflow file
