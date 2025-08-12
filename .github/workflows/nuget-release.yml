@@ -30,9 +30,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Build in Release mode (net8.0, net9.0)
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
+      # Build main library in Release mode (net8.0, net9.0)
+      - name: Build main library
+        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release --no-restore
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
@@ -61,9 +61,9 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
 
-      # Package NuGet
+      # Package NuGet (main library only)
       - name: Pack NuGet package
-        run: dotnet pack --configuration Release --output ./nupkgs
+        run: dotnet pack src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release --output ./nupkgs
 
       # Upload build artifacts
       - name: Upload NuGet package
