@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>SitecoreAPIAuthorization</id>
+    <version>0.9.0</version>
+    <authors>Aaron Metz</authors>
+    <owners>Aaron Metz</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>High-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and dependency injection support. Features OAuth2 client credentials flow, intelligent token caching, automatic refresh, and comprehensive integration testing capabilities.</description>
+    <summary>High-performance OAuth2 authentication library for Sitecore Cloud services with intelligent token caching and automatic refresh.</summary>
+    <releaseNotes>See CHANGELOG.md for details.</releaseNotes>
+    <tags>Sitecore OAuth2 Authentication Token Caching .NET</tags>
+    <projectUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</projectUrl>
+    <repositoryUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</repositoryUrl>
+    <license type="expression">MIT</license>
+  </metadata>
+  <files>
+    <file src="src/Sitecore.API.Foundation.Authorization/bin/Release/net8.0/Sitecore.API.Foundation.Authorization.dll" target="lib/net8.0/" />
+    <file src="src/Sitecore.API.Foundation.Authorization/bin/Release/net9.0/Sitecore.API.Foundation.Authorization.dll" target="lib/net9.0/" />
+  </files>
+</package>
