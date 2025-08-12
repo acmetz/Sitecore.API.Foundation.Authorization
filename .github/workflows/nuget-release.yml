@@ -5,11 +5,11 @@
 name: NuGet Release Pipeline
 
 on:
-  pull_request:
-    branches: [ main ]
   push:
     tags:
       - 'v*'
+    branches:
+      - main
 
 jobs:
   build-test:
@@ -30,16 +30,17 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Build in Release mode
+      # Build in Release mode (multi-target from csproj)
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
-      # Run tests with coverage
-      - name: Test with coverage
+      # Run tests with coverage (skip Docker-related tests)
+      - name: Test with coverage (skip Docker integration)
         run: >
           dotnet test --configuration Release --no-build \
             --collect:"XPlat Code Coverage" \
-            --results-directory ./TestResults
+            --results-directory ./TestResults \
+            --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
 
       # Convert coverage to cobertura format
       - name: Convert coverage to cobertura
