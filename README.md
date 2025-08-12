@@ -1,4 +1,4 @@
-# Sitecore.API.Foundation.Authorization
+# Sitecore API Authorization
 
 A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and comprehensive integration testing.
 
