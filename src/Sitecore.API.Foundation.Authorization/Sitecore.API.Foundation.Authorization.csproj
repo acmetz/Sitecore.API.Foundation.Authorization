@@ -1,0 +1,64 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0;net9.0</TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    
+    <!-- Package Information -->
+    <PackageId>Sitecore.API.Foundation.Authorization</PackageId>
+    <Title>Sitecore API Foundation Authorization Library</Title>
+    <Description>A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and dependency injection support. Features OAuth2 client credentials flow, intelligent token caching, automatic refresh, and comprehensive integration testing capabilities.</Description>
+    <Summary>High-performance OAuth2 authentication library for Sitecore Cloud services with intelligent token caching and automatic refresh.</Summary>
+    <PackageVersion>1.0.0</PackageVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    
+    <!-- NuGet Package Classification -->
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    
+    <!-- Package Quality and Compliance - Disabled for now -->
+    <PackageValidationEnabled>false</PackageValidationEnabled>
+    <EnablePackageValidation>false</EnablePackageValidation>
+    
+    <!-- Build Configuration -->
+    <Deterministic>true</Deterministic>
+    <Features>strict</Features>
+    
+    <!-- Assembly Information -->
+    <AssemblyTitle>Sitecore API Foundation Authorization</AssemblyTitle>
+    <AssemblyDescription>OAuth2 authentication library for Sitecore Cloud services</AssemblyDescription>
+    <AssemblyConfiguration Condition="'$(Configuration)' == 'Debug'">Debug</AssemblyConfiguration>
+    <AssemblyConfiguration Condition="'$(Configuration)' != 'Debug'">Release</AssemblyConfiguration>
+    <AssemblyCompany>Open Source</AssemblyCompany>
+    <AssemblyProduct>Sitecore.API.Foundation.Authorization</AssemblyProduct>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <Optimize>false</Optimize>
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Sitecore.API.Foundation.Tests" />
+    <InternalsVisibleTo Include="Sitecore.API.Foundation.Authorization.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,119 @@
+# CI/CD Pipeline for C# Library Distributed via NuGet
+# This workflow builds, tests, runs code coverage, packages, and publishes to NuGet.
+# It supports multi-target frameworks and follows open-source best practices.
+
+name: NuGet Release Pipeline
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup .NET
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # Restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore
+
+      # Build in Release mode
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      # Run tests with coverage
+      - name: Test with coverage
+        run: >
+          dotnet test --configuration Release --no-build \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults
+
+      # Convert coverage to cobertura format
+      - name: Convert coverage to cobertura
+        run: >
+          reportgenerator -reports:./TestResults/**/coverage.cobertura.xml \
+            -targetdir:./TestResults/CoverageReport \
+            -reporttypes:Cobertura
+        continue-on-error: true
+
+      # Upload coverage to Codecov (optional)
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./TestResults/CoverageReport/Cobertura.xml
+        continue-on-error: true
+
+      # Package NuGet
+      - name: Pack NuGet package
+        run: dotnet pack --configuration Release --output ./nupkgs
+
+      # Upload build artifacts
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs
+          path: ./nupkgs/*.nupkg
+
+  release:
+    name: Release and Publish
+    needs: build-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup .NET
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # Download NuGet package artifact
+      - name: Download NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: nupkgs
+          path: ./nupkgs
+
+      # Semantic versioning and changelog
+      - name: Generate changelog and version
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml
+
+      # Update .csproj version (automated)
+      - name: Update .csproj version
+        run: |
+          VERSION_TAG=${GITHUB_REF#refs/tags/v}
+          find . -name "*.csproj" -exec sed -i "" "s#<Version>.*</Version>#<Version>${VERSION_TAG}</Version>#" {} +
+
+      # Publish to NuGet
+      - name: Publish to NuGet
+        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+      # Create GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: ./CHANGELOG.md
+          files: ./nupkgs/*.nupkg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# End of workflow file
