@@ -65,9 +65,9 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
 
-      # Package NuGet (main library only)
+      # Package NuGet using .nuspec
       - name: Pack NuGet package
-        run: dotnet pack src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release --output ./nupkgs
+        run: dotnet nuget pack SitecoreAPIAuthorization.nuspec -OutputDirectory ./nupkgs
 
       # Upload build artifacts
       - name: Upload NuGet package
