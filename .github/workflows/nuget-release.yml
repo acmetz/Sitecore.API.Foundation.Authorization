@@ -105,12 +105,6 @@ jobs:
         with:
           config-name: release-drafter.yml
 
-      # Update .csproj version (automated)
-      - name: Update .csproj version
-        run: |
-          VERSION_TAG=${GITHUB_REF#refs/tags/v}
-          find . -name "*.csproj" -exec sed -i "" "s#<Version>.*</Version>#<Version>${VERSION_TAG}</Version>#" {} +
-
       # Publish to NuGet
       - name: Publish to NuGet
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
