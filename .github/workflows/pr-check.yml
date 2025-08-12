@@ -39,19 +39,4 @@ jobs:
             --results-directory ./TestResults \
             --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
 
-      # Convert coverage to cobertura format
-      - name: Convert coverage to cobertura
-        run: >
-          reportgenerator -reports:./TestResults/**/coverage.cobertura.xml \
-            -targetdir:./TestResults/CoverageReport \
-            -reporttypes:Cobertura
-        continue-on-error: true
-
-      # Upload coverage to Codecov (optional)
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./TestResults/CoverageReport/Cobertura.xml
-        continue-on-error: true
-
 # End of workflow file
