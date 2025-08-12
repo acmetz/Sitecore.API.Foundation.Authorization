@@ -1,0 +1,56 @@
+# PR Check Workflow for C# Library
+# This workflow runs on pull requests to ensure code builds and tests pass (excluding Docker tests).
+
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    name: Build and Test (No Docker)
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup .NET
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # Restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore
+
+      # Build in Release mode
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      # Run tests with coverage (skip Docker-related tests)
+      - name: Test with coverage (skip Docker integration)
+        run: >
+          dotnet test --configuration Release --no-build \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
+
+      # Convert coverage to cobertura format
+      - name: Convert coverage to cobertura
+        run: >
+          reportgenerator -reports:./TestResults/**/coverage.cobertura.xml \
+            -targetdir:./TestResults/CoverageReport \
+            -reporttypes:Cobertura
+        continue-on-error: true
+
+      # Upload coverage to Codecov (optional)
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./TestResults/CoverageReport/Cobertura.xml
+        continue-on-error: true
+
+# End of workflow file
