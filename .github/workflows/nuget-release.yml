@@ -5,11 +5,11 @@
 name: NuGet Release Pipeline
 
 on:
-  pull_request:
-    branches: [ main ]
   push:
     tags:
       - 'v*'
+    branches:
+      - main
 
 jobs:
   build-test:
@@ -30,9 +30,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Build all target frameworks in Release mode
-      - name: Build (all target frameworks)
-        run: dotnet build --configuration Release --no-restore /p:TargetFrameworks="net6.0;net8.0;net9.0"
+      # Build in Release mode (multi-target from csproj)
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
