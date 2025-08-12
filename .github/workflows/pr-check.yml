@@ -26,9 +26,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # Build in Release mode
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
+      # Build all target frameworks in Release mode
+      - name: Build (all target frameworks)
+        run: dotnet build --configuration Release --no-restore /p:TargetFrameworks="net6.0;net8.0;net9.0"
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
