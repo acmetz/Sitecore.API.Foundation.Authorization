@@ -67,7 +67,7 @@ jobs:
 
       # Package NuGet from the project (uses PackageId=SitecoreAPIAuthorization)
       - name: Pack NuGet package
-        run: dotnet nuget pack SitecoreAPIAuthorization.nuspec -OutputDirectory ./nupkgs
+        run: dotnet pack src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release --output ./nupkgs
 
       # Upload build artifacts
       - name: Upload NuGet package
