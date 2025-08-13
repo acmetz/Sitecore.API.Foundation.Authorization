@@ -13,8 +13,8 @@
     <!-- Package Properties -->
     <Authors>Aaron Metz</Authors>
     <Company>Open Source</Company>
-    <Product>Sitecore API Authorization</Product>
-    <Copyright>Copyright (c) 2025 Contributors</Copyright>
+    <Product>SitecoreAPIAuthorization</Product>
+    <Copyright>Copyright (c) 2025</Copyright>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
   <PackageProjectUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</PackageProjectUrl>
   <RepositoryUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</RepositoryUrl>
