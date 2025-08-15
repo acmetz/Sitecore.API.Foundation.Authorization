@@ -34,11 +34,6 @@ public class SitecoreTokenService : ISitecoreTokenService
     /// <summary>
     /// Initializes a new instance of the <see cref="SitecoreTokenService"/> class.
     /// </summary>
-    /// <param name="httpClient">The HTTP client to use for authentication requests.</param>
-    /// <param name="tokenCache">The token cache to use for storing and retrieving tokens.</param>
-    /// <param name="options">The configuration options for the token service.</param>
-    /// <param name="logger">Optional logger instance.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpClient"/>, <paramref name="tokenCache"/>, or <paramref name="options"/> is null.</exception>
     public SitecoreTokenService(
         HttpClient httpClient,
         ISitecoreTokenCache tokenCache,
@@ -70,6 +65,8 @@ public class SitecoreTokenService : ISitecoreTokenService
         }
 
         _logger?.LogInformation("Requesting new token for clientId {ClientId} from {AuthUrl}.", credentials.ClientId, _options.AuthTokenUrl);
+        _logger?.LogDebug("Auth request payload: audience={Audience}, grant_type={GrantType}, client_id={ClientId}.", Constants.SitecoreAuthAudience, Constants.SitecoreAuthGrantType, credentials.ClientId);
+
         var authRequest = new
         {
             audience = Constants.SitecoreAuthAudience,
@@ -78,11 +75,13 @@ public class SitecoreTokenService : ISitecoreTokenService
             client_secret = credentials.ClientSecret,
         };
         
-        using HttpResponseMessage response = await HttpClient.PostAsJsonAsync(_options.AuthTokenUrl, authRequest);
+        using var response = await HttpClient.PostAsJsonAsync(_options.AuthTokenUrl, authRequest);
+        _logger?.LogDebug("Auth response status: {StatusCode} {StatusText}.", (int)response.StatusCode, response.StatusCode);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}.", (int)response.StatusCode, _options.AuthTokenUrl);
+            var body = await SafeReadBodyAsync(response);
+            _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}. Body: {Body}", (int)response.StatusCode, _options.AuthTokenUrl, body);
             throw new SitecoreAuthHttpException((int)response.StatusCode, _options.AuthTokenUrl,
                 $"Failed to get auth token. Received {response.StatusCode} from {_options.AuthTokenUrl}.");
         }
@@ -94,13 +93,15 @@ public class SitecoreTokenService : ISitecoreTokenService
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}.", credentials.ClientId);
+            var raw = await SafeReadBodyAsync(response);
+            _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to parse auth response.", ex);
         }
         
         if (result is null || string.IsNullOrEmpty(result.access_token))
         {
-            _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}.", credentials.ClientId);
+            var raw = await SafeReadBodyAsync(response);
+            _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to read auth token from response or token is not set.");
         }
         
@@ -133,5 +134,17 @@ public class SitecoreTokenService : ISitecoreTokenService
         }
         
         return await GetSitecoreAuthToken(credentials.Value);
+    }
+
+    private static async Task<string> SafeReadBodyAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            return await response.Content.ReadAsStringAsync();
+        }
+        catch
+        {
+            return "<unavailable>";
+        }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sitecore.API.Foundation.Authorization.Abstractions;
 using Sitecore.API.Foundation.Authorization.Configuration;
@@ -10,29 +11,20 @@ using Sitecore.API.Foundation.Authorization.Models;
 
 namespace Sitecore.API.Foundation.Authorization.Services;
 
-/// <summary>
-/// High-performance, thread-safe in-memory cache for Sitecore authentication tokens using ConcurrentDictionary.
-/// </summary>
 public class SitecoreTokenCache : ISitecoreTokenCache
 {
     private readonly ConcurrentDictionary<SitecoreAuthClientCredentials, SitecoreAuthToken> _tokens = new();
     private readonly SitecoreTokenServiceOptions _options;
     private readonly ReaderWriterLockSlim _cleanupLock = new();
+    private readonly ILogger<SitecoreTokenCache>? _logger;
     private long _lastCleanupTicks = DateTimeOffset.MinValue.Ticks;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SitecoreTokenCache"/> class.
-    /// </summary>
-    /// <param name="options">The configuration options for the token cache.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
-    public SitecoreTokenCache(IOptions<SitecoreTokenServiceOptions> options)
+    public SitecoreTokenCache(IOptions<SitecoreTokenServiceOptions> options, ILogger<SitecoreTokenCache>? logger = null)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger = logger;
     }
 
-    /// <summary>
-    /// Gets the current number of tokens in the cache.
-    /// </summary>
     public int CacheSize => _tokens.Count;
 
     private DateTimeOffset LastCleanup 
@@ -41,82 +33,85 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         set => Interlocked.Exchange(ref _lastCleanupTicks, value.Ticks);
     }
 
-    /// <summary>
-    /// Gets a cached token for the specified credentials if it exists and is not expired.
-    /// </summary>
-    /// <param name="credentials">The credentials to look up.</param>
-    /// <returns>The cached token if found and valid, otherwise null.</returns>
     public SitecoreAuthToken? GetToken(SitecoreAuthClientCredentials credentials)
     {
-        if (!ShouldPerformCleanup())
-        {
-            return TryGetValidToken(credentials);
-        }
-        TryPerformCleanup();
-        return TryGetValidToken(credentials);
+        // First attempt to retrieve and log the state (hit/miss/expired)
+        var token = TryGetValidToken(credentials);
+        if (token.HasValue) return token;
 
+        // If cleanup is needed, perform it opportunistically
+        if (ShouldPerformCleanup())
+        {
+            TryPerformCleanup();
+        }
+
+        return null;
     }
 
     private SitecoreAuthToken? TryGetValidToken(SitecoreAuthClientCredentials credentials)
     {
-        if (_tokens.TryGetValue(credentials, out var token) && !token.IsExpired)
+        if (!_tokens.TryGetValue(credentials, out var token))
         {
-            return token;
+            _logger?.LogDebug("Cache miss for clientId {ClientId}.", credentials.ClientId);
+            return null;
         }
-        return null;
+
+        if (token.IsExpired)
+        {
+            _logger?.LogDebug("Token expired for clientId {ClientId}.", credentials.ClientId);
+            return null;
+        }
+
+        _logger?.LogInformation("Cache hit for clientId {ClientId}.", credentials.ClientId);
+        return token;
     }
 
-    /// <summary>
-    /// Stores a token in the cache for the specified credentials.
-    /// </summary>
-    /// <param name="credentials">The credentials associated with the token.</param>
-    /// <param name="token">The token to cache.</param>
     public void SetToken(SitecoreAuthClientCredentials credentials, SitecoreAuthToken token)
     {
         _tokens.AddOrUpdate(credentials, token, (_, _) => token);
+        _logger?.LogInformation("Token cached for clientId {ClientId} until {Expiration:o}.", credentials.ClientId, token.Expiration);
 
-        // Check if cache size exceeds limit and evict if necessary
         if (_tokens.Count > _options.MaxCacheSize)
         {
             TryEvictOldestTokens();
         }
     }
 
-    /// <summary>
-    /// Removes a token from the cache by finding the credentials associated with it.
-    /// </summary>
-    /// <param name="token">The token to remove.</param>
-    /// <returns>The credentials that were associated with the token, or null if not found.</returns>
     public SitecoreAuthClientCredentials? RemoveToken(SitecoreAuthToken token)
     {
-        // Find the first matching key and remove it
         var keyToRemove = _tokens.FirstOrDefault(kvp => kvp.Value.Equals(token)).Key;
         bool found = !EqualityComparer<SitecoreAuthClientCredentials>.Default.Equals(keyToRemove, default);
-        if (found && _tokens.TryRemove(keyToRemove, out _))
+        if (!found) return null;
+
+        if (_tokens.TryRemove(keyToRemove, out _))
         {
+            _logger?.LogInformation("Removed token for clientId {ClientId} from cache.", keyToRemove.ClientId);
             return keyToRemove;
         }
+
         return null;
     }
 
-    /// <summary>
-    /// Clears all tokens from the cache.
-    /// </summary>
     public void ClearCache()
     {
+        var count = _tokens.Count;
         _tokens.Clear();
         LastCleanup = DateTimeOffset.MinValue;
+        _logger?.LogInformation("Cache cleared, removed {Count} token(s).", count);
     }
 
-    /// <summary>
-    /// Performs cleanup operations on the cache, removing expired tokens and enforcing size limits.
-    /// </summary>
     public void PerformCleanup()
     {
         _cleanupLock.EnterWriteLock();
         try
         {
+            var before = _tokens.Count;
             CleanupExpiredTokensUnsafe();
+            var removed = before - _tokens.Count;
+            if (removed > 0)
+            {
+                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
+            }
             LastCleanup = DateTimeOffset.UtcNow;
         }
         finally
@@ -134,7 +129,6 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     private bool HasExpiredTokens()
     {
-        // Quick check for expired tokens (sampling approach for performance)
         int sampleSize = Math.Min(5, _tokens.Count);
         int count = 0;
         foreach (var kvp in _tokens)
@@ -148,24 +142,24 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     private void TryPerformCleanup()
     {
-        // Use TryEnterWriteLock to avoid blocking read operations
-        if (_cleanupLock.TryEnterWriteLock(TimeSpan.FromMilliseconds(10)))
+        if (!_cleanupLock.TryEnterWriteLock(TimeSpan.FromMilliseconds(10))) return;
+        try
         {
-            try
+            if (!ShouldPerformCleanup()) return;
+
+            var before = _tokens.Count;
+            CleanupExpiredTokensUnsafe();
+            var removed = before - _tokens.Count;
+            if (removed > 0)
             {
-                // Double-check if cleanup is still needed
-                if (ShouldPerformCleanup())
-                {
-                    CleanupExpiredTokensUnsafe();
-                    LastCleanup = DateTimeOffset.UtcNow;
-                }
+                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
             }
-            finally
-            {
-                _cleanupLock.ExitWriteLock();
-            }
+            LastCleanup = DateTimeOffset.UtcNow;
         }
-        // If we can't get the lock quickly, let another thread handle cleanup
+        finally
+        {
+            _cleanupLock.ExitWriteLock();
+        }
     }
 
     private void CleanupExpiredTokensUnsafe()
@@ -178,11 +172,16 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     private void TryEvictOldestTokens()
     {
-        if (!_cleanupLock.TryEnterWriteLock(TimeSpan.FromMilliseconds(50)))
-            return;
+        if (!_cleanupLock.TryEnterWriteLock(TimeSpan.FromMilliseconds(50))) return;
         try
         {
+            var before = _tokens.Count;
             EvictOldestTokensUnsafe();
+            var removed = before - _tokens.Count;
+            if (removed > 0)
+            {
+                _logger?.LogInformation("Evicted {Count} token(s) due to cache size limit.", removed);
+            }
         }
         finally
         {
@@ -205,10 +204,6 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         }
     }
 
-    /// <summary>
-    /// Releases the unmanaged resources used by the <see cref="SitecoreTokenCache"/> and optionally releases the managed resources.
-    /// </summary>
-    /// <param name="disposing">true to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (disposing)
@@ -217,9 +212,6 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         }
     }
 
-    /// <summary>
-    /// Releases all resources used by the <see cref="SitecoreTokenCache"/>.
-    /// </summary>
     public void Dispose()
     {
         Dispose(true);

@@ -69,6 +69,37 @@ public class LoggingIntegrationTests
         logger.Entries.ShouldContain(e => e.Level == LogLevel.Error && e.Message.Contains("Failed to parse authentication response"));
     }
 
+    [Fact]
+    public async Task Should_log_service_and_cache_messages()
+    {
+        // Arrange
+        await _mock.EnsureInitializedAsync();
+        var options = Options.Create(new SitecoreTokenServiceOptions { AuthTokenUrl = _mock.TokenEndpoint });
+        using var serviceLogger = new InMemoryLogger<SitecoreTokenService>();
+        using var cacheLogger = new InMemoryLogger<SitecoreTokenCache>();
+        var cache = new SitecoreTokenCache(options, cacheLogger);
+        var svc = new SitecoreTokenService(_mock.HttpClient, cache, options, serviceLogger);
+        var creds = new SitecoreAuthClientCredentials(_mock.ClientId, _mock.ClientSecret);
+
+        // Act: first call (network), second (cache)
+        var t1 = await svc.GetSitecoreAuthToken(creds);
+        var t2 = await svc.GetSitecoreAuthToken(creds);
+
+        // Assert: service logs
+        serviceLogger.Entries.ShouldContain(e => e.Message.Contains("Requesting new token"));
+        serviceLogger.Entries.ShouldContain(e => e.Message.Contains("Token acquired and cached"));
+        serviceLogger.Entries.ShouldContain(e => e.Message.Contains("Token cache hit"));
+
+        // Assert: cache logs
+        cacheLogger.Entries.ShouldContain(e => e.Message.Contains("Cache miss for clientId"));
+        cacheLogger.Entries.ShouldContain(e => e.Message.Contains("Token cached for clientId"));
+        cacheLogger.Entries.ShouldContain(e => e.Message.Contains("Cache hit for clientId"));
+
+        // Also validate returned tokens
+        t1.AccessToken.ShouldNotBeEmpty();
+        t2.ShouldBe(t1);
+    }
+
     private sealed class TestHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
