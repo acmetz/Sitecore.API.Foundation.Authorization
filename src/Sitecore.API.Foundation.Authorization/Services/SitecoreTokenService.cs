@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sitecore.API.Foundation.Authorization.Abstractions;
 using Sitecore.API.Foundation.Authorization.Configuration;
@@ -22,6 +23,7 @@ public class SitecoreTokenService : ISitecoreTokenService
     
     private readonly ISitecoreTokenCache _tokenCache;
     private readonly SitecoreTokenServiceOptions _options;
+    private readonly ILogger<SitecoreTokenService>? _logger;
 
     private class AuthResponse
     {
@@ -35,12 +37,18 @@ public class SitecoreTokenService : ISitecoreTokenService
     /// <param name="httpClient">The HTTP client to use for authentication requests.</param>
     /// <param name="tokenCache">The token cache to use for storing and retrieving tokens.</param>
     /// <param name="options">The configuration options for the token service.</param>
+    /// <param name="logger">Optional logger instance.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="httpClient"/>, <paramref name="tokenCache"/>, or <paramref name="options"/> is null.</exception>
-    public SitecoreTokenService(HttpClient httpClient, ISitecoreTokenCache tokenCache, IOptions<SitecoreTokenServiceOptions> options) 
+    public SitecoreTokenService(
+        HttpClient httpClient,
+        ISitecoreTokenCache tokenCache,
+        IOptions<SitecoreTokenServiceOptions> options,
+        ILogger<SitecoreTokenService>? logger = null) 
     {
         HttpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _tokenCache = tokenCache ?? throw new ArgumentNullException(nameof(tokenCache));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _logger = logger;
     }
 
     /// <summary>
@@ -49,7 +57,6 @@ public class SitecoreTokenService : ISitecoreTokenService
     /// </summary>
     /// <param name="credentials">The client credentials to authenticate with.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the authentication token.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="credentials"/> is null.</exception>
     /// <exception cref="SitecoreAuthHttpException">Thrown when the HTTP request fails or returns an error status code.</exception>
     /// <exception cref="SitecoreAuthResponseException">Thrown when the authentication response cannot be parsed or is invalid.</exception>
     public async Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials)
@@ -58,9 +65,11 @@ public class SitecoreTokenService : ISitecoreTokenService
         var cachedToken = _tokenCache.GetToken(credentials);
         if (cachedToken.HasValue)
         {
+            _logger?.LogInformation("Token cache hit for clientId {ClientId}.", credentials.ClientId);
             return cachedToken.Value;
         }
-        
+
+        _logger?.LogInformation("Requesting new token for clientId {ClientId} from {AuthUrl}.", credentials.ClientId, _options.AuthTokenUrl);
         var authRequest = new
         {
             audience = Constants.SitecoreAuthAudience,
@@ -73,6 +82,7 @@ public class SitecoreTokenService : ISitecoreTokenService
 
         if (!response.IsSuccessStatusCode)
         {
+            _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}.", (int)response.StatusCode, _options.AuthTokenUrl);
             throw new SitecoreAuthHttpException((int)response.StatusCode, _options.AuthTokenUrl,
                 $"Failed to get auth token. Received {response.StatusCode} from {_options.AuthTokenUrl}.");
         }
@@ -84,11 +94,13 @@ public class SitecoreTokenService : ISitecoreTokenService
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}.", credentials.ClientId);
             throw new SitecoreAuthResponseException("Failed to parse auth response.", ex);
         }
         
         if (result is null || string.IsNullOrEmpty(result.access_token))
         {
+            _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}.", credentials.ClientId);
             throw new SitecoreAuthResponseException("Failed to read auth token from response or token is not set.");
         }
         
@@ -97,6 +109,7 @@ public class SitecoreTokenService : ISitecoreTokenService
         
         // Cache the new token
         _tokenCache.SetToken(credentials, sitecoreToken);
+        _logger?.LogInformation("Token acquired and cached until {Expiration:o} for clientId {ClientId}.", sitecoreToken.Expiration, credentials.ClientId);
         
         return sitecoreToken;
     }
@@ -107,7 +120,6 @@ public class SitecoreTokenService : ISitecoreTokenService
     /// </summary>
     /// <param name="token">The token to refresh.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the new authentication token.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when the token is not managed by this service.</exception>
     /// <exception cref="SitecoreAuthHttpException">Thrown when the HTTP request fails or returns an error status code.</exception>
     /// <exception cref="SitecoreAuthResponseException">Thrown when the authentication response cannot be parsed or is invalid.</exception>
@@ -116,6 +128,7 @@ public class SitecoreTokenService : ISitecoreTokenService
         var credentials = _tokenCache.RemoveToken(token);
         if (!credentials.HasValue)
         {
+            _logger?.LogWarning("Attempted to refresh a token not managed by the service.");
             throw new ArgumentException("The provided token is not managed by this service.", nameof(token));
         }
         

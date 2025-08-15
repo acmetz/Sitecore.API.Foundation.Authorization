@@ -1,5 +1,10 @@
 # Sitecore API Authorization
 
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/acmetz/SitecoreAPIGraphQLClient/ci.yml?branch=main)](https://github.com/acmetz/SitecoreAPIGraphQLClient/actions)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![.NET](https://img.shields.io/badge/.NET-8%20%7C%209-blue)
+[![NuGet](https://img.shields.io/nuget/v/SitecoreAPIAuthorization.svg)](https://www.nuget.org/packages/SitecoreAPIAuthorization/)
+
 A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and comprehensive integration testing.
 
 ## Quick Start
@@ -9,6 +14,7 @@ A high-performance, thread-safe .NET library for managing Sitecore Cloud authent
 dotnet add package Sitecore.API.Foundation.Authorization
 
 // 2. Register services
+services.AddLogging();
 services.AddSitecoreAuthentication();
 
 // 3. Use in your code
@@ -31,25 +37,45 @@ public class MyService
 
 ## Key Features
 
-- **Thread-safe token caching** with high-performance concurrent operations
-- **Automatic token refresh** and expiration handling
-- **Configurable cache management** with smart cleanup strategies
-- **Environment-specific configuration** for development, staging, and production
-- **Dependency injection integration** with multiple registration patterns
-- **Comprehensive testing framework** with 19 integration tests (16/19 passing)
-- **Docker integration testing** with real Keycloak instances
-- **Mock OAuth2 server** for fast, reliable testing
+- Thread-safe token caching with high-performance concurrent operations
+- Automatic token refresh and expiration handling
+- Configurable cache management with smart cleanup strategies
+- Environment-specific configuration for development, staging, and production
+- Dependency injection integration with multiple registration patterns
+- Logging via Microsoft.Extensions.Logging with structured message templates
+- Comprehensive testing framework with unit and integration tests
+- Docker integration testing with real Keycloak instances and fast mock server
+
+## Logging
+
+The library now supports structured logging via `ILogger<SitecoreTokenService>`.
+
+- Information: cache hits, token acquisition and caching
+- Warning: HTTP failures and invalid refresh attempts
+- Error: response parsing failures or missing access_token
+
+Register logging and the library in your DI container:
+
+```csharp
+var services = new ServiceCollection();
+services.AddLogging(builder => builder.AddConsole());
+services.AddSitecoreAuthentication(options =>
+{
+    options.AuthTokenUrl = "https://auth.sitecorecloud.io/oauth/token";
+});
+```
+
+Example messages:
+- Token cache hit for clientId {ClientId}.
+- Requesting new token for clientId {ClientId} from {AuthUrl}.
+- Token acquired and cached until {Expiration} for clientId {ClientId}.
+- Authentication request failed with status {StatusCode} for {AuthUrl}.
+- Failed to parse authentication response for clientId {ClientId}.
 
 ## Documentation
 
-
-For comprehensive documentation including installation, configuration, advanced usage scenarios, testing framework documentation, troubleshooting guide, and performance optimization tips, see:
-
-
 - [README.md](README.md) - Project overview and usage (this file)
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Development and contribution guidelines
-- [Integration Test Documentation](docs/README.md) - Detailed integration test setup and troubleshooting
-- Source code documentation via XML comments
 
 ## Quick Commands
 
