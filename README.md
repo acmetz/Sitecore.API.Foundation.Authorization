@@ -1,5 +1,10 @@
 # Sitecore API Authorization
 
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/acmetz/Sitecore.API.Foundation.Authorization/ci.yml?branch=main)](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/actions)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![.NET](https://img.shields.io/badge/.NET-8%20%7C%209-blue)
+[![NuGet](https://img.shields.io/nuget/v/SitecoreAPIAuthorization.svg)](https://www.nuget.org/packages/SitecoreAPIAuthorization)
+
 A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and comprehensive integration testing.
 
 ## Quick Start
@@ -9,6 +14,7 @@ A high-performance, thread-safe .NET library for managing Sitecore Cloud authent
 dotnet add package Sitecore.API.Foundation.Authorization
 
 // 2. Register services
+services.AddLogging(b => b.SetMinimumLevel(LogLevel.Debug).AddConsole());
 services.AddSitecoreAuthentication();
 
 // 3. Use in your code
@@ -31,52 +37,50 @@ public class MyService
 
 ## Key Features
 
-- **Thread-safe token caching** with high-performance concurrent operations
-- **Automatic token refresh** and expiration handling
-- **Configurable cache management** with smart cleanup strategies
-- **Environment-specific configuration** for development, staging, and production
-- **Dependency injection integration** with multiple registration patterns
-- **Comprehensive testing framework** with 19 integration tests (16/19 passing)
-- **Docker integration testing** with real Keycloak instances
-- **Mock OAuth2 server** for fast, reliable testing
+- Thread-safe token caching with high-performance concurrent operations
+- Automatic token refresh and expiration handling
+- Configurable cache management with smart cleanup strategies
+- Environment-specific configuration for development, staging, and production
+- Dependency injection integration with multiple registration patterns
+- Logging via Microsoft.Extensions.Logging with detailed debug and information messages (service and cache)
+- Comprehensive testing framework with unit and integration tests
+- Docker integration testing with real Keycloak instances and fast mock server
 
-## Documentation
+## Logging
 
+The library emits detailed logs that help diagnose authentication and caching behavior.
 
-For comprehensive documentation including installation, configuration, advanced usage scenarios, testing framework documentation, troubleshooting guide, and performance optimization tips, see:
+Service logs:
+- Token cache hit for clientId {ClientId}.
+- Requesting new token for clientId {ClientId} from {AuthUrl}.
+- Auth request payload and response status.
+- Authentication request failed with status {StatusCode} for {AuthUrl}. Body: <captured>
+- Failed to parse authentication response for clientId {ClientId}. Raw: <captured>
+- Authentication response was empty or missing access_token for clientId {ClientId}. Raw: <captured>
+- Token acquired and cached until {Expiration} for clientId {ClientId}.
 
+Cache logs:
+- Cache miss for clientId {ClientId}.
+- Cache hit for clientId {ClientId}.
+- Token cached for clientId {ClientId} until {Expiration}.
+- Evicted {Count} token(s) due to cache size limit.
+- Cleanup removed {Count} expired token(s).
+- Cache cleared, removed {Count} token(s).
+- Removed token for clientId {ClientId} from cache.
 
-- [README.md](README.md) - Project overview and usage (this file)
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Development and contribution guidelines
-- [Integration Test Documentation](docs/README.md) - Detailed integration test setup and troubleshooting
-- Source code documentation via XML comments
+Enable console logging at Debug level in development to see these details.
 
 ## Quick Commands
 
 ```bash
-# Run all working integration tests
+# Run mock and infrastructure integration tests
 dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests --filter "MockIntegrationTests OR InfrastructureTests"
 
-# Run fast mock integration tests only
-dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests --filter "MockIntegrationTests"
+# Run logging integration tests only
+dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests --filter "FullyQualifiedName~LoggingIntegrationTests"
 
-# Run all tests (including Docker tests)
+# Run all tests
 dotnet test
-```
-
-## Docker Integration Setup
-
-For full Docker integration testing:
-
-```bash
-# 1. Switch Docker to Linux containers
-# Right-click Docker Desktop "Switch to Linux containers..."
-
-# 2. Pull Keycloak image
-docker pull quay.io/keycloak/keycloak:24.0.1
-
-# 3. Run all tests
-dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests
 ```
 
 ## License
