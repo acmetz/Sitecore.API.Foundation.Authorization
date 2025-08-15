@@ -78,17 +78,17 @@ Sitecore.API.Foundation/
 
 ### Package Manager Console
 ```powershell
-Install-Package Sitecore.API.Foundation.Authorization
+Install-Package SitecoreAPIAuthorization
 ```
 
 ### .NET CLI
 ```bash
-dotnet add package Sitecore.API.Foundation.Authorization
+dotnet add package SitecoreAPIAuthorization
 ```
 
 ### PackageReference
 ```xml
-<PackageReference Include="Sitecore.API.Foundation.Authorization" />
+<PackageReference Include="SitecoreAPIAuthorization" />
 ```
 
 ## Quick Start

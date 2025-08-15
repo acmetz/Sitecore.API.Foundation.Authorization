@@ -11,7 +11,7 @@ A high-performance, thread-safe .NET library for managing Sitecore Cloud authent
 
 ```csharp
 // 1. Install the package
-dotnet add package Sitecore.API.Foundation.Authorization
+dotnet add package SitecoreAPIAuthorization
 
 // 2. Register services
 services.AddLogging(b => b.SetMinimumLevel(LogLevel.Debug).AddConsole());
