@@ -10,10 +10,10 @@
     <Title>Sitecore API Foundation Authorization Library</Title>
     <Description>A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and dependency injection support. Features OAuth2 client credentials flow, intelligent token caching, automatic refresh, and comprehensive integration testing capabilities.</Description>
     <Summary>High-performance OAuth2 authentication library for Sitecore Cloud services with intelligent token caching and automatic refresh.</Summary>
-    <PackageVersion>0.9.1</PackageVersion>
-    <AssemblyVersion>0.9.1.0</AssemblyVersion>
-    <FileVersion>0.9.1.0</FileVersion>
-    <InformationalVersion>0.9.1</InformationalVersion>
+    <PackageVersion>0.9.2</PackageVersion>
+    <AssemblyVersion>0.9.2.0</AssemblyVersion>
+    <FileVersion>0.9.2.0</FileVersion>
+    <InformationalVersion>0.9.2</InformationalVersion>
     
     <!-- NuGet Package Classification -->
     <IsPackable>true</IsPackable>
