@@ -1,9 +1,9 @@
 # Sitecore API Authorization
 
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/your-org/your-repo/ci.yml?branch=main)](https://github.com/your-org/your-repo/actions)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/acmetz/Sitecore.API.Foundation.Authorization/ci.yml?branch=main)](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 ![.NET](https://img.shields.io/badge/.NET-8%20%7C%209-blue)
-[![NuGet](https://img.shields.io/nuget/v/Sitecore.API.Foundation.Authorization.svg)](https://www.nuget.org/packages/Sitecore.API.Foundation.Authorization)
+[![NuGet](https://img.shields.io/nuget/v/SitecoreAPIAuthorization.svg)](https://www.nuget.org/packages/SitecoreAPIAuthorization)
 
 A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and comprehensive integration testing.
 
