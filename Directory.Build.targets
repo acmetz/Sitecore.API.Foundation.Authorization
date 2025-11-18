@@ -1,0 +1,7 @@
+<Project>
+  <!-- Ensure proper cross-targeting support for .NET 8, 9, and 10 -->
+  <PropertyGroup>
+    <!-- Disable parallel builds to avoid cross-targeting issues in .NET 10 SDK -->
+    <BuildInParallel Condition="'$(TargetFrameworks)' != ''">false</BuildInParallel>
+  </PropertyGroup>
+</Project>

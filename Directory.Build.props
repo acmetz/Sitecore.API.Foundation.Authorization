@@ -1,7 +1,6 @@
 <Project>
   <PropertyGroup>
-    <LangVersion>13.0</LangVersion>
-    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>NU1603</WarningsNotAsErrors>
@@ -16,13 +15,13 @@
     <Product>SitecoreAPIAuthorization</Product>
     <Copyright>Copyright (c) 2025</Copyright>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-  <PackageProjectUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</PackageProjectUrl>
-  <RepositoryUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>sitecore;oauth2;authentication;caching;dotnet;authorization;token;jwt</PackageTags>
     <PackageReleaseNotes>See CHANGELOG.md for release notes.</PackageReleaseNotes>
-  <!-- <PackageIcon>icon.png</PackageIcon> -->
+    <!-- <PackageIcon>icon.png</PackageIcon> -->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
@@ -47,6 +46,6 @@
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" />
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
-  <!-- <None Include="$(MSBuildThisFileDirectory)docs\icon.png" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildThisFileDirectory)docs\icon.png')" /> -->
+    <!-- <None Include="$(MSBuildThisFileDirectory)docs\icon.png" Pack="true" PackagePath="\" Condition="Exists('$(MSBuildThisFileDirectory)docs\icon.png')" /> -->
   </ItemGroup>
 </Project>
