@@ -7,6 +7,7 @@ using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.DependencyInjection;
 using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Sitecore.API.Foundation.Tests;
@@ -15,9 +16,9 @@ public class ServiceCollectionExtensionsOverrideTests
 {
     private sealed class CustomTokenService : ISitecoreTokenService
     {
-        public Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials)
+        public Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials, CancellationToken cancellationToken = default)
             => Task.FromResult(new SitecoreAuthToken("custom", DateTimeOffset.UtcNow.AddMinutes(5)));
-        public Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token)
+        public Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token, CancellationToken cancellationToken = default)
             => Task.FromResult(new SitecoreAuthToken("custom2", DateTimeOffset.UtcNow.AddMinutes(5)));
     }
 

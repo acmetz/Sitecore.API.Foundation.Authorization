@@ -338,6 +338,45 @@ public class SitecoreTokenServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSitecoreAuthToken_WithCancellationToken_ShouldThrowTaskCanceledException()
+    {
+        // Arrange
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        _mockMessageHandler.SetResponse(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"access_token\":\"test-token\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
+        });
+
+        // Act & Assert
+        await Should.ThrowAsync<TaskCanceledException>(
+            () => _service.GetSitecoreAuthToken(_testCredentials, cts.Token));
+    }
+
+    [Fact]
+    public async Task TryRefreshSitecoreAuthToken_WithCancellationToken_ShouldThrowTaskCanceledException()
+    {
+        // Arrange
+        var originalTokenResponse = new { access_token = "original-token", expires_in = 3600 };
+        var jsonResponse = JsonSerializer.Serialize(originalTokenResponse);
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
+        };
+        _mockMessageHandler.SetResponse(httpResponse);
+
+        var token = await _service.GetSitecoreAuthToken(_testCredentials);
+
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert
+        await Should.ThrowAsync<TaskCanceledException>(
+            () => _service.TryRefreshSitecoreAuthToken(token, cts.Token));
+    }
+
+    [Fact]
     public async Task GetSitecoreAuthToken_SendsCorrectRequestPayload()
     {
         // Arrange
@@ -765,6 +804,11 @@ public class TestHttpMessageHandler : HttpMessageHandler
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         _requests.Add(request);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled<HttpResponseMessage>(cancellationToken);
+        }
 
         if (_responseFactories.Count > 0)
         {

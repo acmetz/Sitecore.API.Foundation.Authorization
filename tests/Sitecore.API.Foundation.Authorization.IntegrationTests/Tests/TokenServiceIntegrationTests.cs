@@ -8,6 +8,7 @@ using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
 using Xunit;
 using Xunit.Abstractions;
+using System.Threading.Tasks;
 
 namespace Sitecore.API.Foundation.Authorization.IntegrationTests.Tests;
 

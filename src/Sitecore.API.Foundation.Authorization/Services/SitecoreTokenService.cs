@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -51,11 +52,14 @@ public class SitecoreTokenService : ISitecoreTokenService
     /// Tokens are cached and reused until they expire. Automatic cleanup of expired tokens is performed periodically.
     /// </summary>
     /// <param name="credentials">The client credentials to authenticate with.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the authentication token.</returns>
     /// <exception cref="SitecoreAuthHttpException">Thrown when the HTTP request fails or returns an error status code.</exception>
     /// <exception cref="SitecoreAuthResponseException">Thrown when the authentication response cannot be parsed or is invalid.</exception>
-    public async Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials)
+    public async Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        
         // Check for cached token
         var cachedToken = _tokenCache.GetToken(credentials);
         if (cachedToken.HasValue)
@@ -75,12 +79,12 @@ public class SitecoreTokenService : ISitecoreTokenService
             client_secret = credentials.ClientSecret,
         };
         
-        using var response = await HttpClient.PostAsJsonAsync(_options.AuthTokenUrl, authRequest);
+        using var response = await HttpClient.PostAsJsonAsync(_options.AuthTokenUrl, authRequest, cancellationToken).ConfigureAwait(false);
         _logger?.LogDebug("Auth response status: {StatusCode} {StatusText}.", (int)response.StatusCode, response.StatusCode);
 
         if (!response.IsSuccessStatusCode)
         {
-            var body = await SafeReadBodyAsync(response);
+            var body = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
             _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}. Body: {Body}", (int)response.StatusCode, _options.AuthTokenUrl, body);
             throw new SitecoreAuthHttpException((int)response.StatusCode, _options.AuthTokenUrl,
                 $"Failed to get auth token. Received {response.StatusCode} from {_options.AuthTokenUrl}.");
@@ -89,18 +93,18 @@ public class SitecoreTokenService : ISitecoreTokenService
         AuthResponse? result;
         try
         {
-            result = await response.Content.ReadFromJsonAsync<AuthResponse>();
+            result = await response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            var raw = await SafeReadBodyAsync(response);
+            var raw = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
             _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to parse auth response.", ex);
         }
         
         if (result is null || string.IsNullOrEmpty(result.access_token))
         {
-            var raw = await SafeReadBodyAsync(response);
+            var raw = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
             _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to read auth token from response or token is not set.");
         }
@@ -120,11 +124,12 @@ public class SitecoreTokenService : ISitecoreTokenService
     /// The old token is removed from the cache and a new token is generated.
     /// </summary>
     /// <param name="token">The token to refresh.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the new authentication token.</returns>
     /// <exception cref="ArgumentException">Thrown when the token is not managed by this service.</exception>
     /// <exception cref="SitecoreAuthHttpException">Thrown when the HTTP request fails or returns an error status code.</exception>
     /// <exception cref="SitecoreAuthResponseException">Thrown when the authentication response cannot be parsed or is invalid.</exception>
-    public async Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token)
+    public async Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token, CancellationToken cancellationToken = default)
     {
         var credentials = _tokenCache.RemoveToken(token);
         if (!credentials.HasValue)
@@ -133,14 +138,14 @@ public class SitecoreTokenService : ISitecoreTokenService
             throw new ArgumentException("The provided token is not managed by this service.", nameof(token));
         }
         
-        return await GetSitecoreAuthToken(credentials.Value);
+        return await GetSitecoreAuthToken(credentials.Value, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<string> SafeReadBodyAsync(HttpResponseMessage response)
+    private static async Task<string> SafeReadBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken = default)
     {
         try
         {
-            return await response.Content.ReadAsStringAsync();
+            return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
         catch
         {

@@ -8,6 +8,8 @@ using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
 using Xunit;
 using Xunit.Abstractions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Sitecore.API.Foundation.Authorization.IntegrationTests.Tests;
 
@@ -345,6 +347,20 @@ public class MockIntegrationTests : IAsyncDisposable
         
         _output.WriteLine($"? Cache size is properly managed: {cache.CacheSize} tokens");
         _output.WriteLine("? Cache cleanup and eviction working correctly");
+    }
+
+    [Fact]
+    public async Task SitecoreTokenService_should_throw_when_cancellation_is_requested()
+    {
+        // Arrange
+        await _mockFixture.EnsureInitializedAsync();
+        var credentials = new SitecoreAuthClientCredentials(_mockFixture.ClientId, _mockFixture.ClientSecret);
+        var cancellationTokenSource = new CancellationTokenSource();
+        cancellationTokenSource.Cancel();
+
+        // Act & Assert
+        await Should.ThrowAsync<OperationCanceledException>(
+            () => _tokenService.GetSitecoreAuthToken(credentials, cancellationTokenSource.Token));
     }
 
     public async ValueTask DisposeAsync()
