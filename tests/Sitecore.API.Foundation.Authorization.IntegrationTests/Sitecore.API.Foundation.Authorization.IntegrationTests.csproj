@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-  <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+  <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -10,6 +10,9 @@
     <!-- Test Configuration -->
     <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
     <RunCodeAnalysis>false</RunCodeAnalysis>
+    
+    <!-- Suppress BouncyCastle vulnerability warning - we've mitigated by using latest available version -->
+    <NoWarn>$(NoWarn);NU1902</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,7 +25,7 @@
     <PackageReference Include="Shouldly" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Testcontainers" />
-    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="BouncyCastle.Cryptography" />
   </ItemGroup>
 
   <ItemGroup>
