@@ -5,131 +5,130 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sitecore.API.Foundation.Authorization.Abstractions;
 using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.Services;
+using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Options;
+using System.Linq;
+using System.Net.Http;
+using Microsoft.Extensions.Logging;
 
 namespace Sitecore.API.Foundation.Authorization.DependencyInjection;
 
-/// <summary>
-/// Extension methods for registering Sitecore authentication services in the dependency injection container.
-/// </summary>
 public static class ServiceCollectionExtensions
 {
-    /// <summary>
-    /// Adds Sitecore authentication services to the service collection.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">Optional action to configure the token service options.</param>
-    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddSitecoreAuthentication(
         this IServiceCollection services,
-        Action<SitecoreTokenServiceOptions>? configureOptions = null)
+        Action<SitecoreTokenServiceOptions>? configureOptions = null,
+        Action<HttpStandardResilienceOptions>? configureResilience = null,
+        Action<IHttpClientBuilder>? configureClient = null,
+        Func<IServiceProvider, HttpClient>? httpClientFactory = null)
     {
-        // Configure options
-        if (configureOptions != null)
-        {
-            services.Configure(configureOptions);
-        }
-        else
-        {
-            services.Configure<SitecoreTokenServiceOptions>(_ => { });
-        }
-
-        // Register HttpClient if not already registered
-        services.AddHttpClient();
-
-        // Register cache as singleton (shared across all requests)
-        services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
-
-        // Register service as scoped (new instance per request/scope)
-        services.TryAddScoped<ISitecoreTokenService, SitecoreTokenService>();
-
-        return services;
+        return services.AddSitecoreAuthenticationInternal(
+            configureOptions,
+            configureResilience,
+            configureClient,
+            httpClientFactory,
+            ServiceLifetime.Scoped);
     }
 
-    /// <summary>
-    /// Adds Sitecore authentication services to the service collection with configuration from IConfiguration.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configuration">The configuration instance.</param>
-    /// <param name="sectionName">The configuration section name. Defaults to "SitecoreAuthentication".</param>
-    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddSitecoreAuthentication(
         this IServiceCollection services,
         IConfiguration configuration,
-        string sectionName = "SitecoreAuthentication")
+        string sectionName = "SitecoreAuthentication",
+        Action<HttpStandardResilienceOptions>? configureResilience = null,
+        Action<IHttpClientBuilder>? configureClient = null,
+        Func<IServiceProvider, HttpClient>? httpClientFactory = null)
     {
-        // Configure options from configuration
-        services.Configure<SitecoreTokenServiceOptions>(
-            configuration.GetSection(sectionName));
-
-        // Register HttpClient if not already registered
-        services.AddHttpClient();
-
-        // Register cache as singleton (shared across all requests)
-        services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
-
-        // Register service as scoped (new instance per request/scope)
-        services.TryAddScoped<ISitecoreTokenService, SitecoreTokenService>();
-
-        return services;
+        return services.AddSitecoreAuthenticationInternal(
+            options => configuration.GetSection(sectionName).Bind(options),
+            configureResilience,
+            configureClient,
+            httpClientFactory,
+            ServiceLifetime.Scoped);
     }
 
-    /// <summary>
-    /// Adds Sitecore authentication services to the service collection with singleton lifetime for the service.
-    /// Use this when you want to share the same service instance across the entire application.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configureOptions">Optional action to configure the token service options.</param>
-    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddSitecoreAuthenticationSingleton(
         this IServiceCollection services,
-        Action<SitecoreTokenServiceOptions>? configureOptions = null)
+        Action<SitecoreTokenServiceOptions>? configureOptions = null,
+        Action<HttpStandardResilienceOptions>? configureResilience = null,
+        Action<IHttpClientBuilder>? configureClient = null,
+        Func<IServiceProvider, HttpClient>? httpClientFactory = null)
     {
-        // Configure options
-        if (configureOptions != null)
-        {
-            services.Configure(configureOptions);
-        }
-        else
-        {
-            services.Configure<SitecoreTokenServiceOptions>(_ => { });
-        }
-
-        // Register HttpClient if not already registered
-        services.AddHttpClient();
-
-        // Register cache as singleton
-        services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
-
-        // Register service as singleton
-        services.TryAddSingleton<ISitecoreTokenService, SitecoreTokenService>();
-
-        return services;
+        return services.AddSitecoreAuthenticationInternal(
+            configureOptions,
+            configureResilience,
+            configureClient,
+            httpClientFactory,
+            ServiceLifetime.Singleton);
     }
 
-    /// <summary>
-    /// Adds Sitecore authentication services to the service collection with singleton lifetime for the service and configuration from IConfiguration.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configuration">The configuration instance.</param>
-    /// <param name="sectionName">The configuration section name. Defaults to "SitecoreAuthentication".</param>
-    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddSitecoreAuthenticationSingleton(
         this IServiceCollection services,
         IConfiguration configuration,
-        string sectionName = "SitecoreAuthentication")
+        string sectionName = "SitecoreAuthentication",
+        Action<HttpStandardResilienceOptions>? configureResilience = null,
+        Action<IHttpClientBuilder>? configureClient = null,
+        Func<IServiceProvider, HttpClient>? httpClientFactory = null)
     {
-        // Configure options from configuration
-        services.Configure<SitecoreTokenServiceOptions>(
-            configuration.GetSection(sectionName));
+        return services.AddSitecoreAuthenticationInternal(
+            options => configuration.GetSection(sectionName).Bind(options),
+            configureResilience,
+            configureClient,
+            httpClientFactory,
+            ServiceLifetime.Singleton);
+    }
 
-        // Register HttpClient if not already registered
-        services.AddHttpClient();
+    private static IServiceCollection AddSitecoreAuthenticationInternal(
+        this IServiceCollection services,
+        Action<SitecoreTokenServiceOptions>? configureOptions,
+        Action<HttpStandardResilienceOptions>? configureResilience,
+        Action<IHttpClientBuilder>? configureClient,
+        Func<IServiceProvider, HttpClient>? httpClientFactory,
+        ServiceLifetime lifetime)
+    {
+        if (configureOptions != null)
+            services.Configure(configureOptions);
+        else
+            services.Configure<SitecoreTokenServiceOptions>(_ => { });
 
-        // Register cache as singleton
         services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
 
-        // Register service as singleton
-        services.TryAddSingleton<ISitecoreTokenService, SitecoreTokenService>();
+        var userHasService = services.Any(d => d.ServiceType == typeof(ISitecoreTokenService));
+        if (userHasService)
+        {
+            // Respect user-registered service; do not register our own typed client.
+            return services;
+        }
+
+        if (httpClientFactory is not null)
+        {
+            services.TryAdd(new ServiceDescriptor(typeof(ISitecoreTokenService), sp =>
+            {
+                var client = httpClientFactory(sp);
+                var opts = sp.GetRequiredService<IOptions<SitecoreTokenServiceOptions>>();
+                var cache = sp.GetRequiredService<ISitecoreTokenCache>();
+                var logger = sp.GetRequiredService<ILogger<SitecoreTokenService>>();
+                return new SitecoreTokenService(client, opts, cache, logger);
+            }, lifetime));
+            return services;
+        }
+
+        var httpClientBuilder = services.AddHttpClient<ISitecoreTokenService, SitecoreTokenService>();
+        services.TryAddEnumerable(ServiceDescriptor.Describe(typeof(ISitecoreTokenService), typeof(SitecoreTokenService), lifetime));
+
+        if (lifetime == ServiceLifetime.Singleton)
+        {
+            var descriptor = services.LastOrDefault(d => d.ServiceType == typeof(ISitecoreTokenService));
+            if (descriptor?.ImplementationFactory != null)
+            {
+                services.Remove(descriptor);
+                services.Add(new ServiceDescriptor(descriptor.ServiceType, descriptor.ImplementationFactory, ServiceLifetime.Singleton));
+            }
+        }
+
+        if (configureResilience != null)
+            httpClientBuilder.AddStandardResilienceHandler().Configure(configureResilience);
+
+        configureClient?.Invoke(httpClientBuilder);
 
         return services;
     }

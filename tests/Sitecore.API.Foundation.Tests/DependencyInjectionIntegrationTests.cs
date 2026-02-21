@@ -1,15 +1,9 @@
 using System;
-using System.Net;
 using System.Net.Http;
-using System.Text.Json;
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
-using Sitecore.API.Foundation.Authorization;
 using Sitecore.API.Foundation.Authorization.Abstractions;
-using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.DependencyInjection;
-using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
 
 namespace Sitecore.API.Foundation.Tests;

@@ -17,45 +17,33 @@ namespace Sitecore.API.Foundation.Authorization.Services;
 /// </summary>
 public class SitecoreTokenService : ISitecoreTokenService
 {
-    /// <summary>
-    /// Gets the HTTP client used for authentication requests.
-    /// </summary>
-    protected readonly HttpClient HttpClient;
+    private readonly HttpClient _httpClient;
     
     private readonly ISitecoreTokenCache _tokenCache;
     private readonly SitecoreTokenServiceOptions _options;
-    private readonly ILogger<SitecoreTokenService>? _logger;
-
-    private class AuthResponse
-    {
-        public string? access_token { get; set; }
-        public int expires_in { get; set; }
-    }
+    private readonly ILogger<SitecoreTokenService> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SitecoreTokenService"/> class.
     /// </summary>
+    /// <param name="httpClient">The <see cref="HttpClient"/> to use for making requests.</param>
+    /// <param name="options">The configuration options for the token service.</param>
+    /// <param name="tokenCache">The cache for storing and retrieving tokens.</param>
+    /// <param name="logger">The logger for logging information and errors.</param>
     public SitecoreTokenService(
         HttpClient httpClient,
-        ISitecoreTokenCache tokenCache,
         IOptions<SitecoreTokenServiceOptions> options,
-        ILogger<SitecoreTokenService>? logger = null) 
+        ISitecoreTokenCache tokenCache,
+        ILogger<SitecoreTokenService> logger)
     {
-        HttpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _options = options.Value ?? throw new ArgumentNullException(nameof(options));
         _tokenCache = tokenCache ?? throw new ArgumentNullException(nameof(tokenCache));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        _logger = logger;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>
-    /// Gets a Sitecore authentication token for the specified credentials.
-    /// Tokens are cached and reused until they expire. Automatic cleanup of expired tokens is performed periodically.
-    /// </summary>
-    /// <param name="credentials">The client credentials to authenticate with.</param>
-    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
-    /// <returns>A task that represents the asynchronous operation. The task result contains the authentication token.</returns>
-    /// <exception cref="SitecoreAuthHttpException">Thrown when the HTTP request fails or returns an error status code.</exception>
-    /// <exception cref="SitecoreAuthResponseException">Thrown when the authentication response cannot be parsed or is invalid.</exception>
+    /// <inheritdoc />
     public async Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -78,44 +66,46 @@ public class SitecoreTokenService : ISitecoreTokenService
             client_id = credentials.ClientId,
             client_secret = credentials.ClientSecret,
         };
-        
-        using var response = await HttpClient.PostAsJsonAsync(_options.AuthTokenUrl, authRequest, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.PostAsJsonAsync(_options.AuthTokenUrl, authRequest, cancellationToken).ConfigureAwait(false);
         _logger?.LogDebug("Auth response status: {StatusCode} {StatusText}.", (int)response.StatusCode, response.StatusCode);
 
         if (!response.IsSuccessStatusCode)
         {
-            var body = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
-            _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}. Body: {Body}", (int)response.StatusCode, _options.AuthTokenUrl, body);
+            var bodyError = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
+            _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}. Body: {Body}", (int)response.StatusCode, _options.AuthTokenUrl, bodyError);
             throw new SitecoreAuthHttpException((int)response.StatusCode, _options.AuthTokenUrl,
                 $"Failed to get auth token. Received {response.StatusCode} from {_options.AuthTokenUrl}.");
         }
-        
+
+        // Read raw first to distinguish empty/null vs parse errors
+        var rawContent = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(rawContent) || rawContent == "null")
+        {
+            _logger?.LogError("Authentication response was empty for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, rawContent);
+            throw new SitecoreAuthResponseException("Failed to read auth token from response");
+        }
+
         AuthResponse? result;
         try
         {
-            result = await response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            result = System.Text.Json.JsonSerializer.Deserialize<AuthResponse>(rawContent);
         }
         catch (Exception ex)
         {
-            var raw = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
-            _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
+            _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, rawContent);
             throw new SitecoreAuthResponseException("Failed to parse auth response.", ex);
         }
-        
+
         if (result is null || string.IsNullOrEmpty(result.access_token))
         {
-            var raw = await SafeReadBodyAsync(response, cancellationToken).ConfigureAwait(false);
-            _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
+            _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, rawContent);
             throw new SitecoreAuthResponseException("Failed to read auth token from response or token is not set.");
         }
-        
+
         var goodUntil = DateTimeOffset.UtcNow.AddSeconds(result.expires_in);
         var sitecoreToken = new SitecoreAuthToken(result.access_token, goodUntil);
-        
-        // Cache the new token
         _tokenCache.SetToken(credentials, sitecoreToken);
         _logger?.LogInformation("Token acquired and cached until {Expiration:o} for clientId {ClientId}.", sitecoreToken.Expiration, credentials.ClientId);
-        
         return sitecoreToken;
     }
 
@@ -145,11 +135,19 @@ public class SitecoreTokenService : ISitecoreTokenService
     {
         try
         {
-            return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (response.Content == null) return string.Empty;
+            var s = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return s ?? string.Empty;
         }
         catch
         {
-            return "<unavailable>";
+            return string.Empty; // treat unreadable as empty so tests classify as read failure rather than parse failure
         }
+    }
+
+    private class AuthResponse
+    {
+        public string? access_token { get; set; }
+        public int expires_in { get; set; }
     }
 }

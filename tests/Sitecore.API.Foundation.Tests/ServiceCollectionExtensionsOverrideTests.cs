@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Shouldly;
@@ -7,30 +9,40 @@ using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.DependencyInjection;
 using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
-using System.Threading;
-using System.Threading.Tasks;
+using Sitecore.API.Foundation.Tests.Mocks;
+using Xunit;
 
 namespace Sitecore.API.Foundation.Tests;
 
 public class ServiceCollectionExtensionsOverrideTests
 {
-    private sealed class CustomTokenService : ISitecoreTokenService
+    private class CustomTokenService : ISitecoreTokenService
     {
         public Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials, CancellationToken cancellationToken = default)
-            => Task.FromResult(new SitecoreAuthToken("custom", DateTimeOffset.UtcNow.AddMinutes(5)));
+        {
+            var token = new SitecoreAuthToken("custom", DateTimeOffset.UtcNow.AddMinutes(30));
+            return Task.FromResult(token);
+        }
+
         public Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token, CancellationToken cancellationToken = default)
-            => Task.FromResult(new SitecoreAuthToken("custom2", DateTimeOffset.UtcNow.AddMinutes(5)));
+        {
+            var refreshed = new SitecoreAuthToken("custom_refreshed", DateTimeOffset.UtcNow.AddHours(1));
+            return Task.FromResult(refreshed);
+        }
     }
 
-    private sealed class CustomCache : ISitecoreTokenCache
+    private class CustomCache : ISitecoreTokenCache
     {
         public int CacheSize => 0;
-        public void ClearCache() { }
-        public void Dispose() { }
-        public SitecoreAuthToken? GetToken(SitecoreAuthClientCredentials credentials) => null;
-        public void PerformCleanup() { }
-        public SitecoreAuthClientCredentials? RemoveToken(SitecoreAuthToken token) => null;
+        public SitecoreAuthToken? GetToken(SitecoreAuthClientCredentials credentials)
+        {
+            return new SitecoreAuthToken("custom_cache", DateTimeOffset.UtcNow.AddHours(1));
+        }
         public void SetToken(SitecoreAuthClientCredentials credentials, SitecoreAuthToken token) { }
+        public SitecoreAuthClientCredentials? RemoveToken(SitecoreAuthToken token) => null;
+        public void ClearCache() { }
+        public void PerformCleanup() { }
+        public void Dispose() { }
     }
 
     [Fact]
@@ -38,7 +50,6 @@ public class ServiceCollectionExtensionsOverrideTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<ISitecoreTokenService, CustomTokenService>();
-
         services.AddSitecoreAuthentication();
         var sp = services.BuildServiceProvider();
 
@@ -64,7 +75,6 @@ public class ServiceCollectionExtensionsOverrideTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<ISitecoreTokenService, CustomTokenService>();
-
         services.AddSitecoreAuthenticationSingleton();
         var sp = services.BuildServiceProvider();
 

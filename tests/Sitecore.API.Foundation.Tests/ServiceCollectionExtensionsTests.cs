@@ -4,12 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
 using Shouldly;
-using Sitecore.API.Foundation.Authorization;
 using Sitecore.API.Foundation.Authorization.Abstractions;
 using Sitecore.API.Foundation.Authorization.Configuration;
-using Sitecore.API.Foundation.Authorization.DependencyInjection;
-using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
+using Sitecore.API.Foundation.Authorization.DependencyInjection;
+using Xunit;
 
 namespace Sitecore.API.Foundation.Tests;
 

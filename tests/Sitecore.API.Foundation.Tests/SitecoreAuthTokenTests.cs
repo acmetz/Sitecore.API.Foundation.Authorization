@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Shouldly;
-using Sitecore.API.Foundation.Authorization;
 using Sitecore.API.Foundation.Authorization.Models;
 
 namespace Sitecore.API.Foundation.Tests;

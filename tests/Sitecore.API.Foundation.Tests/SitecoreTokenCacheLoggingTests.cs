@@ -6,7 +6,6 @@ using Shouldly;
 using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
-using Xunit;
 
 namespace Sitecore.API.Foundation.Tests;
 

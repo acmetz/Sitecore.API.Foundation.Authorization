@@ -1,7 +1,6 @@
 using System;
 using System.Net;
 using System.Net.Http;
-using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -13,104 +12,77 @@ using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.Exceptions;
 using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
+using Sitecore.API.Foundation.Tests.Mocks;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Sitecore.API.Foundation.Tests;
 
 public class SitecoreTokenServiceLoggingTests
 {
-    private static SitecoreTokenService CreateService(
-        ISitecoreTokenCache cache,
-        HttpMessageHandler handler,
-        ILogger<SitecoreTokenService>? logger = null)
-    {
-        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://example.com/") };
-        var options = Options.Create(new SitecoreTokenServiceOptions { AuthTokenUrl = "https://auth.test/token" });
-        return new SitecoreTokenService(httpClient, cache, options, logger);
-    }
+    private readonly ITestOutputHelper _output;
+    private readonly IOptions<SitecoreTokenServiceOptions> _options;
+    private readonly ISitecoreTokenCache _tokenCache;
+    private readonly HttpClient _httpClient;
 
-    private sealed class StubHandler : HttpMessageHandler
+    public SitecoreTokenServiceLoggingTests(ITestOutputHelper output)
     {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
-        public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) => _responder = responder;
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            => Task.FromResult(_responder(request));
+        _output = output;
+        _options = Options.Create(new SitecoreTokenServiceOptions());
+        _tokenCache = new SitecoreTokenCache(_options);
+        _httpClient = new HttpClient(new MockHttpMessageHandler(System.Net.HttpStatusCode.OK, "{}"));
     }
 
     [Fact]
-    public async Task GetSitecoreAuthToken_UsesCacheAndLogsHit()
+    public async Task GetSitecoreAuthToken_ShouldLogInformation_WhenTokenIsRetrievedFromCache()
     {
-        // Arrange
-        var creds = new SitecoreAuthClientCredentials("id","secret");
-        var token = new SitecoreAuthToken("tok", DateTimeOffset.UtcNow.AddMinutes(5));
-        var cache = Substitute.For<ISitecoreTokenCache>();
-        cache.GetToken(creds).Returns(token);
-        var logger = Substitute.For<ILogger<SitecoreTokenService>>();
-        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
-        var svc = CreateService(cache, handler, logger);
-
-        // Act
-        var result = await svc.GetSitecoreAuthToken(creds);
-
-        // Assert
-        result.ShouldBe(token);
-        logger.Received().Log(
-            LogLevel.Information,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Token cache hit")),
-            Arg.Any<Exception?>(),
-            Arg.Any<Func<object, Exception?, string>>());
+        var logger = new TestLogger<SitecoreTokenService>(_output);
+        var creds = new SitecoreAuthClientCredentials("test-client","secret");
+        _tokenCache.SetToken(creds, new SitecoreAuthToken("cached-token", DateTimeOffset.UtcNow.AddHours(1)));
+        var service = new SitecoreTokenService(_httpClient, _options, _tokenCache, logger);
+        await service.GetSitecoreAuthToken(creds);
+        logger.Entries.ShouldContain(e => e.Message.Contains("Token cache hit"));
     }
 
     [Fact]
-    public async Task GetSitecoreAuthToken_HttpFailure_LogsWarningAndThrows()
+    public async Task GetSitecoreAuthToken_ShouldLogWarning_WhenTokenIsExpired()
     {
-        // Arrange
-        var creds = new SitecoreAuthClientCredentials("id","secret");
-        var cache = Substitute.For<ISitecoreTokenCache>();
-        cache.GetToken(creds).Returns((SitecoreAuthToken?)null);
-        var logger = Substitute.For<ILogger<SitecoreTokenService>>();
-        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest));
-        var svc = CreateService(cache, handler, logger);
-
-        // Act
-        var act = Task.Run(() => svc.GetSitecoreAuthToken(creds));
-
-        // Assert
-        var ex = await Should.ThrowAsync<SitecoreAuthHttpException>(act);
-        ex.StatusCode.ShouldBe((int)HttpStatusCode.BadRequest);
-        logger.Received().Log(
-            LogLevel.Warning,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Authentication request failed")),
-            Arg.Any<Exception?>(),
-            Arg.Any<Func<object, Exception?, string>>());
+        var logger = new TestLogger<SitecoreTokenService>(_output);
+        var creds = new SitecoreAuthClientCredentials("test-client","secret");
+        _tokenCache.SetToken(creds, new SitecoreAuthToken("expired-token", DateTimeOffset.UtcNow.AddSeconds(-10)));
+        var httpClient = new HttpClient(new MockHttpMessageHandler(HttpStatusCode.OK, "{}"));
+        var service = new SitecoreTokenService(httpClient, _options, _tokenCache, logger);
+        await Assert.ThrowsAsync<SitecoreAuthResponseException>(() => service.GetSitecoreAuthToken(creds));
+        logger.Entries.ShouldContain(e => e.Message.Contains("empty or missing access_token"));
     }
 
     [Fact]
-    public async Task GetSitecoreAuthToken_ParseFailure_LogsErrorAndThrows()
+    public async Task GetSitecoreAuthToken_ShouldLogError_WhenResponseIsUnsuccessful()
     {
-        // Arrange
-        var creds = new SitecoreAuthClientCredentials("id","secret");
-        var cache = Substitute.For<ISitecoreTokenCache>();
-        cache.GetToken(creds).Returns((SitecoreAuthToken?)null);
-        var logger = Substitute.For<ILogger<SitecoreTokenService>>();
-        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent("{ invalid json }")
-        });
-        var svc = CreateService(cache, handler, logger);
+        var logger = new TestLogger<SitecoreTokenService>(_output);
+        var httpClient = new HttpClient(new MockHttpMessageHandler(HttpStatusCode.BadRequest, "error"));
+        var service = new SitecoreTokenService(httpClient, _options, _tokenCache, logger);
+        await Assert.ThrowsAsync<SitecoreAuthHttpException>(() => service.GetSitecoreAuthToken(new SitecoreAuthClientCredentials("test-client","secret")));
+        logger.Entries.ShouldContain(e => e.Message.Contains("Authentication request failed with status"));
+    }
 
-        // Act
-        var act = Task.Run(() => svc.GetSitecoreAuthToken(creds));
+    [Fact]
+    public async Task GetSitecoreAuthToken_ShouldLogError_WhenTokenResponseIsNullOrEmpty()
+    {
+        var logger = new TestLogger<SitecoreTokenService>(_output);
+        var httpClient = new HttpClient(new MockHttpMessageHandler(HttpStatusCode.OK, "{}"));
+        var service = new SitecoreTokenService(httpClient, _options, _tokenCache, logger);
+        await Assert.ThrowsAsync<SitecoreAuthResponseException>(() => service.GetSitecoreAuthToken(new SitecoreAuthClientCredentials("test-client","secret")));
+        logger.Entries.ShouldContain(e => e.Message.Contains("empty or missing access_token"));
+    }
 
-        // Assert
-        await Should.ThrowAsync<SitecoreAuthResponseException>(act);
-        logger.Received().Log(
-            LogLevel.Error,
-            Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Failed to parse authentication response")),
-            Arg.Any<Exception?>(),
-            Arg.Any<Func<object, Exception?, string>>());
+    [Fact]
+    public async Task GetSitecoreAuthToken_ShouldLogError_WhenResponseIsInvalid()
+    {
+        var logger = new TestLogger<SitecoreTokenService>(_output);
+        var httpClient = new HttpClient(new MockHttpMessageHandler(HttpStatusCode.OK, "{ invalid json }"));
+        var service = new SitecoreTokenService(httpClient, _options, _tokenCache, logger);
+        await Assert.ThrowsAsync<SitecoreAuthResponseException>(() => service.GetSitecoreAuthToken(new SitecoreAuthClientCredentials("test-client","secret")));
+        logger.Entries.ShouldContain(e => e.Message.Contains("Failed to parse authentication response"));
     }
 }
