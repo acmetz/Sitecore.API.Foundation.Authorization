@@ -27,6 +27,26 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      # Get NuGet package metadata (name & version)
+      - name: Get NuGet package metadata
+        id: package-metadata
+        run: |
+          CSPROJ_PATH="src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj"
+          PACKAGE_ID=$(dotnet msbuild -getProperty:PackageId "$CSPROJ_PATH" -nologo)
+          PACKAGE_VERSION=$(dotnet msbuild -getProperty:PackageVersion "$CSPROJ_PATH" -nologo)
+
+          echo "package-id=$PACKAGE_ID" >> "$GITHUB_OUTPUT"
+          echo "package-version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+      # Check if NuGet package version exists using PackageMonster
+      - name: Check if NuGet package version exists (PackageMonster)
+        id: nuget-exists
+        uses: KinsonDigital/PackageMonster@v1.0.0
+        with:
+          package-name: ${{ steps.package-metadata.outputs.package-id }}
+          version: ${{ steps.package-metadata.outputs.package-version }}
+          fail-when-not-found: true
+
       # Build in Release mode (net8.0, net9.0)
       - name: Build
         run: dotnet build --configuration Release --no-restore
