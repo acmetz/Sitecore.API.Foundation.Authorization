@@ -27,6 +27,8 @@
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.4.0" />
     
     <!-- Build and analysis tools -->
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0"/>
+    <PackageVersion Include="Microsoft.Build.Tasks.Git" Version="8.0.0" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.14.0" />
   </ItemGroup>
 </Project>

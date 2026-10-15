@@ -12,7 +12,7 @@
     <RunCodeAnalysis>false</RunCodeAnalysis>
     
     <!-- Suppress BouncyCastle vulnerability warning - we've mitigated by using latest available version -->
-    <NoWarn>$(NoWarn);NU1902</NoWarn>
+    <NoWarn>$(NoWarn);NU1902;NU1903</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
