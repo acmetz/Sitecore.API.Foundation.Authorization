@@ -11,7 +11,6 @@ namespace Sitecore.API.Foundation.Authorization.Benchmarks;
 [MemoryDiagnoser]
 [SimpleJob(RuntimeMoniker.Net80)]
 [SimpleJob(RuntimeMoniker.Net90)]
-[SimpleJob(RuntimeMoniker.Net100)]
 public class TokenCacheBenchmarks
 {
     private SitecoreTokenCache? _cache;
