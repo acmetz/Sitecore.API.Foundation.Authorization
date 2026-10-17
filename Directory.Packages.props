@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,10 +24,12 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     
     <!-- Integration test dependencies -->
-    <PackageVersion Include="Testcontainers" Version="4.1.0" />
-    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.4.0" />
+    <PackageVersion Include="Testcontainers" Version="4.16.0" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
     
     <!-- Build and analysis tools -->
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0"/>
+    <PackageVersion Include="Microsoft.Build.Tasks.Git" Version="10.0.402" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.2" />
   </ItemGroup>
 </Project>

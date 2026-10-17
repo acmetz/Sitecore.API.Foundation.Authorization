@@ -207,4 +207,139 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         _tokenCache?.Dispose();
         await Task.CompletedTask;
     }
+
+
+    [Fact]
+    public async Task SitecoreTokenService_should_handle_concurrent_requests_with_keycloak()
+    {
+        // Skip this test if we're running in mock mode (Docker/Keycloak unavailable)
+        if (_keycloakFixture.IsMockMode)
+        {
+            _output.WriteLine("Skipping concurrent request test: running in mock mode (Docker/Keycloak unavailable)");
+            return;
+        }
+
+        // Arrange
+        await _keycloakFixture.EnsureInitializedAsync();
+
+        // Ensure options use Keycloak TokenEndpoint directly.
+        var updatedOptions = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = _keycloakFixture.TokenEndpoint,
+            MaxCacheSize = 10,
+            CleanupThreshold = 15,
+            CleanupInterval = TimeSpan.FromMinutes(5)
+        });
+
+        var updatedTokenService = new SitecoreTokenService(_httpClient, _tokenCache, updatedOptions);
+
+        var credentials = new SitecoreAuthClientCredentials(
+            _keycloakFixture.ClientId,
+            _keycloakFixture.ClientSecret);
+
+        // Prime the cache with one awaited call so the following concurrent reads exercise the cache-hit path.
+        var firstToken = await updatedTokenService.GetSitecoreAuthToken(credentials);
+
+        // Act - Make multiple concurrent requests against the already populated cache.
+        var tasks = new[]
+        {
+            updatedTokenService.GetSitecoreAuthToken(credentials),
+            updatedTokenService.GetSitecoreAuthToken(credentials),
+            updatedTokenService.GetSitecoreAuthToken(credentials),
+            updatedTokenService.GetSitecoreAuthToken(credentials),
+            updatedTokenService.GetSitecoreAuthToken(credentials)
+        };
+
+        var results = await Task.WhenAll(tasks);
+
+        // Assert
+        foreach (var result in results)
+        {
+            result.AccessToken.ShouldNotBeNull();
+            result.AccessToken.ShouldNotBeEmpty();
+        }
+
+        foreach (var result in results)
+        {
+            result.ShouldBe(firstToken);
+        }
+
+        _output.WriteLine($"✅ All {results.Length} concurrent requests to Keycloak returned the same cached token");
+    }
+
+    [Fact]
+    public async Task SitecoreTokenService_should_handle_invalid_credentials_with_keycloak()
+    {
+        // Skip this test if we're running in mock mode
+        if (_keycloakFixture.IsMockMode)
+        {
+            _output.WriteLine("Skipping invalid credentials test: running in mock mode (Docker/Keycloak unavailable)");
+            return;
+        }
+
+        // Arrange
+        await _keycloakFixture.EnsureInitializedAsync();
+
+        var updatedOptions = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = _keycloakFixture.TokenEndpoint,
+            MaxCacheSize = 10,
+            CleanupThreshold = 15,
+            CleanupInterval = TimeSpan.FromMinutes(5)
+        });
+
+        var updatedTokenService = new SitecoreTokenService(_httpClient, _tokenCache, updatedOptions);
+
+        var invalidCredentials = new SitecoreAuthClientCredentials(
+            "invalid-client",
+            "invalid-secret");
+
+        // Act & Assert
+        var exception = await Should.ThrowAsync<Exception>(
+            () => updatedTokenService.GetSitecoreAuthToken(invalidCredentials));
+
+        _output.WriteLine($"✅ Correctly rejected invalid credentials by Keycloak: {exception.Message}");
+    }
+
+    [Fact]
+    public async Task SitecoreTokenService_should_handle_token_refresh_with_keycloak()
+    {
+        // Skip this test if we're running in mock mode
+        if (_keycloakFixture.IsMockMode)
+        {
+            _output.WriteLine("Skipping token refresh test: running in mock mode (Docker/Keycloak unavailable)");
+            return;
+        }
+
+        // Arrange
+        await _keycloakFixture.EnsureInitializedAsync();
+
+        var updatedOptions = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = _keycloakFixture.TokenEndpoint,
+            MaxCacheSize = 10,
+            CleanupThreshold = 15,
+            CleanupInterval = TimeSpan.FromMinutes(5)
+        });
+
+        var updatedTokenService = new SitecoreTokenService(_httpClient, _tokenCache, updatedOptions);
+
+        var credentials = new SitecoreAuthClientCredentials(
+            _keycloakFixture.ClientId,
+            _keycloakFixture.ClientSecret);
+
+        // Act
+        var originalToken = await updatedTokenService.GetSitecoreAuthToken(credentials);
+        var refreshedToken = await updatedTokenService.TryRefreshSitecoreAuthToken(originalToken);
+
+        // Assert
+        refreshedToken.AccessToken.ShouldNotBeNull();
+        refreshedToken.AccessToken.ShouldNotBeEmpty();
+        refreshedToken.IsExpired.ShouldBeFalse();
+
+        // Note: Since Keycloak could return the same token if refresh logic isn't strictly forcing new one,
+        // we at least ensure it returns a valid token.
+        _output.WriteLine("✅ Successfully refreshed token with Keycloak");
+    }
+
 }
