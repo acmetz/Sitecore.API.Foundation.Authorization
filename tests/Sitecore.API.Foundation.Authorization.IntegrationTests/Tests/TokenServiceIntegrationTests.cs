@@ -237,10 +237,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             _keycloakFixture.ClientId,
             _keycloakFixture.ClientSecret);
 
-        // Prime the cache once with a real awaited request so the concurrent reads exercise the cache-hit path.
-        var primedToken = await updatedTokenService.GetSitecoreAuthToken(credentials);
-
-        // Act - Make multiple concurrent requests after the cache has already been populated.
+        // Act - Make multiple concurrent requests
         var tasks = new[]
         {
             updatedTokenService.GetSitecoreAuthToken(credentials),
@@ -257,7 +254,13 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         {
             result.AccessToken.ShouldNotBeNull();
             result.AccessToken.ShouldNotBeEmpty();
-            result.ShouldBe(primedToken);
+        }
+
+        // All results should be the same due to caching
+        var firstToken = results[0];
+        foreach (var result in results)
+        {
+            result.ShouldBe(firstToken);
         }
 
         _output.WriteLine($"? All {results.Length} concurrent requests to Keycloak returned the same cached token");
