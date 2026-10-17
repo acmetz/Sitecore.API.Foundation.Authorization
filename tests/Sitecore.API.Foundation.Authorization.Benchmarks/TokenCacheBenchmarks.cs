@@ -37,13 +37,6 @@ public class TokenCacheBenchmarks
         _cache.SetToken(_credentials, _token);
     }
 
-    [IterationSetup(Target = nameof(AddToken))]
-    public void IterationSetup()
-    {
-        // AddToken test should ideally happen on a cache without the exact same token to measure setting it
-        // properly without it just hitting an overwrite fastpath, though the dictionary implementation makes it roughly the same
-    }
-
     [Benchmark]
     public void AddToken()
     {

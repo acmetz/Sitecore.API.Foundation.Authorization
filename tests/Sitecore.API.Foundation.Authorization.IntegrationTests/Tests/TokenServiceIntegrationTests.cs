@@ -264,7 +264,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             result.ShouldBe(firstToken);
         }
 
-        _output.WriteLine($"? All {results.Length} concurrent requests to Keycloak returned the same cached token");
+        _output.WriteLine($"✅ All {results.Length} concurrent requests to Keycloak returned the same cached token");
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         var exception = await Should.ThrowAsync<Exception>(
             () => updatedTokenService.GetSitecoreAuthToken(invalidCredentials));
 
-        _output.WriteLine($"? Correctly rejected invalid credentials by Keycloak: {exception.Message}");
+        _output.WriteLine($"✅ Correctly rejected invalid credentials by Keycloak: {exception.Message}");
     }
 
     [Fact]
@@ -339,7 +339,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
 
         // Note: Since Keycloak could return the same token if refresh logic isn't strictly forcing new one,
         // we at least ensure it returns a valid token.
-        _output.WriteLine($"? Successfully refreshed token with Keycloak");
+        _output.WriteLine("✅ Successfully refreshed token with Keycloak");
     }
 
 }
