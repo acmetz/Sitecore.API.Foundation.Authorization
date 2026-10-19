@@ -105,14 +105,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         _cleanupLock.EnterWriteLock();
         try
         {
-            var before = _tokens.Count;
-            CleanupExpiredTokensUnsafe();
-            var removed = before - _tokens.Count;
-            if (removed > 0)
-            {
-                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
-            }
-            LastCleanup = DateTimeOffset.UtcNow;
+            ExecuteCleanupUnsafe();
         }
         finally
         {
@@ -147,19 +140,24 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         {
             if (!ShouldPerformCleanup()) return;
 
-            var before = _tokens.Count;
-            CleanupExpiredTokensUnsafe();
-            var removed = before - _tokens.Count;
-            if (removed > 0)
-            {
-                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
-            }
-            LastCleanup = DateTimeOffset.UtcNow;
+            ExecuteCleanupUnsafe();
         }
         finally
         {
             _cleanupLock.ExitWriteLock();
         }
+    }
+
+    private void ExecuteCleanupUnsafe()
+    {
+        var before = _tokens.Count;
+        CleanupExpiredTokensUnsafe();
+        var removed = before - _tokens.Count;
+        if (removed > 0)
+        {
+            _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
+        }
+        LastCleanup = DateTimeOffset.UtcNow;
     }
 
     private void CleanupExpiredTokensUnsafe()
