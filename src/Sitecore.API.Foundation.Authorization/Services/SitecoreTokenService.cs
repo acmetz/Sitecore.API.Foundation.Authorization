@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -27,8 +28,11 @@ public class SitecoreTokenService : ISitecoreTokenService
 
     private class AuthResponse
     {
-        public string? access_token { get; set; }
-        public int expires_in { get; set; }
+        [JsonPropertyName("access_token")]
+        public string? AccessToken { get; set; }
+
+        [JsonPropertyName("expires_in")]
+        public int ExpiresIn { get; set; }
     }
 
     /// <summary>
@@ -98,15 +102,15 @@ public class SitecoreTokenService : ISitecoreTokenService
             throw new SitecoreAuthResponseException("Failed to parse auth response.", ex);
         }
         
-        if (result is null || string.IsNullOrEmpty(result.access_token))
+        if (result is null || string.IsNullOrEmpty(result.AccessToken))
         {
             var raw = await SafeReadBodyAsync(response);
             _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to read auth token from response or token is not set.");
         }
         
-        var goodUntil = DateTimeOffset.UtcNow.AddSeconds(result.expires_in);
-        var sitecoreToken = new SitecoreAuthToken(result.access_token, goodUntil);
+        var goodUntil = DateTimeOffset.UtcNow.AddSeconds(result.ExpiresIn);
+        var sitecoreToken = new SitecoreAuthToken(result.AccessToken, goodUntil);
         
         // Cache the new token
         _tokenCache.SetToken(credentials, sitecoreToken);
