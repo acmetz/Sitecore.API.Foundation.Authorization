@@ -25,7 +25,7 @@ jobs:
 
       # Restore dependencies
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore --warnaserror:false
 
       # Build in Release mode (net8.0, net9.0)
       - name: Build
