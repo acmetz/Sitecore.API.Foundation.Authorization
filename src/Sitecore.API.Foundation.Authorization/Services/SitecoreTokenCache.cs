@@ -27,8 +27,8 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     public int CacheSize => _tokens.Count;
 
-    private DateTimeOffset LastCleanup 
-    { 
+    private DateTimeOffset LastCleanup
+    {
         get => new DateTimeOffset(Interlocked.Read(ref _lastCleanupTicks), TimeSpan.Zero);
         set => Interlocked.Exchange(ref _lastCleanupTicks, value.Ticks);
     }
@@ -164,9 +164,12 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     private void CleanupExpiredTokensUnsafe()
     {
-        foreach (var key in _tokens.Where(kvp => kvp.Value.IsExpired).Select(kvp => kvp.Key).ToList())
+        foreach (var kvp in _tokens)
         {
-            _tokens.TryRemove(key, out _);
+            if (kvp.Value.IsExpired)
+            {
+                _tokens.TryRemove(kvp.Key, out _);
+            }
         }
     }
 
