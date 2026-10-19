@@ -164,7 +164,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     private void CleanupExpiredTokensUnsafe()
     {
-        foreach (var key in _tokens.Where(kvp => kvp.Value.IsExpired).Select(kvp => kvp.Key).ToList())
+        foreach (var key in _tokens.ToArray().Where(kvp => kvp.Value.IsExpired).Select(kvp => kvp.Key).ToList())
         {
             _tokens.TryRemove(key, out _);
         }
@@ -193,7 +193,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
     {
         var tokensToRemove = _tokens.Count - _options.MaxCacheSize;
         if (tokensToRemove <= 0 || _tokens.Count == 0) return;
-        var keysToRemove = _tokens
+        var keysToRemove = _tokens.ToArray()
             .OrderBy(kvp => kvp.Value.Expiration)
             .Take(Math.Min(tokensToRemove, _tokens.Count))
             .Select(kvp => kvp.Key)
