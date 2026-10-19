@@ -31,11 +31,11 @@ public class SitecoreTokenServiceTests : IDisposable
     {
         _mockMessageHandler = new TestHttpMessageHandler();
         _httpClient = new HttpClient(_mockMessageHandler);
-        
+
         // Create a real cache instance for most tests
         var options = Options.Create(new SitecoreTokenServiceOptions());
         _mockTokenCache = new SitecoreTokenCache(options);
-        
+
         _service = new SitecoreTokenService(_httpClient, _mockTokenCache, options);
         _testCredentials = new SitecoreAuthClientCredentials("test-client-id", "test-client-secret");
     }
@@ -175,7 +175,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Act & Assert
         var exception = await Should.ThrowAsync<SitecoreAuthHttpException>(
             () => _service.GetSitecoreAuthToken(_testCredentials));
-        
+
         exception.StatusCode.ShouldBe(400);
         exception.RequestUrl.ShouldBe("https://auth.sitecorecloud.io/oauth/token");
         exception.Message.ShouldContain("Failed to get auth token");
@@ -196,7 +196,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Act & Assert
         var exception = await Should.ThrowAsync<SitecoreAuthResponseException>(
             () => _service.GetSitecoreAuthToken(_testCredentials));
-        
+
         exception.Message.ShouldContain("Failed to parse auth response");
         exception.InnerException.ShouldNotBeNull();
     }
@@ -215,7 +215,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Act & Assert
         var exception = await Should.ThrowAsync<SitecoreAuthResponseException>(
             () => _service.GetSitecoreAuthToken(_testCredentials));
-        
+
         exception.Message.ShouldContain("Failed to read auth token from response");
     }
 
@@ -235,7 +235,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Act & Assert
         var exception = await Should.ThrowAsync<SitecoreAuthResponseException>(
             () => _service.GetSitecoreAuthToken(_testCredentials));
-        
+
         exception.Message.ShouldContain("Failed to read auth token from response");
     }
 
@@ -269,7 +269,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Arrange
         var credentials1 = new SitecoreAuthClientCredentials("client1", "secret1");
         var credentials2 = new SitecoreAuthClientCredentials("client2", "secret2");
-        
+
         var authResponse = new { access_token = "test-token", expires_in = 3600 };
         var jsonResponse = JsonSerializer.Serialize(authResponse);
         var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
@@ -332,7 +332,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Act & Assert
         var exception = await Should.ThrowAsync<ArgumentException>(
             () => _service.TryRefreshSitecoreAuthToken(unmanagedToken));
-        
+
         exception.ParamName.ShouldBe("token");
         exception.Message.ShouldContain("not managed by this service");
     }
@@ -359,7 +359,7 @@ public class SitecoreTokenServiceTests : IDisposable
         capturedRequest.RequestUri.ShouldNotBeNull();
         capturedRequest.RequestUri.ToString().ShouldBe("https://auth.sitecorecloud.io/oauth/token");
         capturedRequest.Method.ShouldBe(HttpMethod.Post);
-        
+
         var requestContent = await capturedRequest.Content!.ReadAsStringAsync();
         requestContent.ShouldContain("\"audience\":\"https://api.sitecorecloud.io\"");
         requestContent.ShouldContain("\"grant_type\":\"client_credentials\"");
@@ -392,11 +392,11 @@ public class SitecoreTokenServiceTests : IDisposable
         // Assert
         results.ShouldAllBe(token => !string.IsNullOrEmpty(token.AccessToken));
         results.All(token => token.AccessToken == "test-token").ShouldBeTrue();
-        
+
         // All requests should return the same cached token instance after the first request
         var distinctTokens = results.Distinct().Count();
         distinctTokens.ShouldBe(1);
-        
+
         // Should only make one HTTP call due to caching
         _mockMessageHandler.RequestCount.ShouldBe(1);
     }
@@ -434,7 +434,7 @@ public class SitecoreTokenServiceTests : IDisposable
 
         // Act
         var originalTokenResult = await _service.GetSitecoreAuthToken(credentials);
-        
+
         // For concurrent refresh, we need to be careful because the token might be removed by one thread
         // while another is trying to refresh it. Let's test sequential refreshes instead.
         var firstRefresh = await _service.TryRefreshSitecoreAuthToken(originalTokenResult);
@@ -443,7 +443,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Assert
         firstRefresh.AccessToken.ShouldBe(refreshedToken);
         firstRefresh.ShouldNotBe(originalTokenResult);
-        
+
         secondRefresh.AccessToken.ShouldBe(refreshedToken);
         secondRefresh.ShouldNotBe(firstRefresh);
     }
@@ -490,7 +490,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Arrange
         var shortLivedToken = "short-lived-token";
         var newToken = "new-token";
-        
+
         // First response with very short expiration
         var firstResponse = new { access_token = shortLivedToken, expires_in = 1 };
         var firstJsonResponse = JsonSerializer.Serialize(firstResponse);
@@ -513,22 +513,22 @@ public class SitecoreTokenServiceTests : IDisposable
 
         // Act
         var firstToken = await _service.GetSitecoreAuthToken(credentials);
-        
+
         // Wait for token to expire
         await Task.Delay(2000);
-        
+
         var secondToken = await _service.GetSitecoreAuthToken(credentials);
 
         // Assert
         firstToken.AccessToken.ShouldBe(shortLivedToken);
         secondToken.AccessToken.ShouldBe(newToken);
         firstToken.ShouldNotBe(secondToken);
-        
+
         // Should have made two HTTP calls
         _mockMessageHandler.RequestCount.ShouldBe(2);
     }
 
-    [Fact] 
+    [Fact]
     public async Task GetSitecoreAuthToken_WithSameCredentials_ShouldReuseToken()
     {
         // Arrange
@@ -549,7 +549,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Assert
         token1.ShouldBe(token2);
         token2.ShouldBe(token3);
-        
+
         // Should only make one HTTP call
         _mockMessageHandler.RequestCount.ShouldBe(1);
     }
@@ -582,12 +582,12 @@ public class SitecoreTokenServiceTests : IDisposable
         // Arrange
         var shortLivedResponse = new { access_token = "short-lived", expires_in = 1 };
         var validResponse = new { access_token = "valid-token", expires_in = 3600 };
-        
+
         var shortLivedHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(JsonSerializer.Serialize(shortLivedResponse), Encoding.UTF8, "application/json")
         };
-        
+
         var validHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(JsonSerializer.Serialize(validResponse), Encoding.UTF8, "application/json")
@@ -620,16 +620,16 @@ public class SitecoreTokenServiceTests : IDisposable
         {
             await _service.GetSitecoreAuthToken(creds);
         }
-        
+
         // Wait for tokens to expire
         await Task.Delay(2000);
-        
+
         // Create a new valid token which should trigger cleanup due to threshold
         var validToken = await _service.GetSitecoreAuthToken(validCredentials);
 
         // Assert
         validToken.AccessToken.ShouldBe("valid-token");
-        
+
         // The cache should have been cleaned up during the operation
         var cacheSize = _mockTokenCache.CacheSize;
         cacheSize.ShouldBeLessThanOrEqualTo(10); // Should respect max cache size and cleanup expired tokens
@@ -642,12 +642,12 @@ public class SitecoreTokenServiceTests : IDisposable
         // Arrange
         var expiredResponse = new { access_token = "expired-token", expires_in = 1 };
         var validResponse = new { access_token = "valid-token", expires_in = 3600 };
-        
+
         var expiredHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(JsonSerializer.Serialize(expiredResponse), Encoding.UTF8, "application/json")
         };
-        
+
         var validHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(JsonSerializer.Serialize(validResponse), Encoding.UTF8, "application/json")
@@ -662,10 +662,10 @@ public class SitecoreTokenServiceTests : IDisposable
         // Act - Create one expired token and two valid tokens
         await _service.GetSitecoreAuthToken(expiredCredentials);
         await _service.GetSitecoreAuthToken(validCredentials1);
-        
+
         // Wait for first token to expire
         await Task.Delay(2000);
-        
+
         // This should trigger cleanup and only remove the expired token
         await _service.GetSitecoreAuthToken(validCredentials2);
 
@@ -701,7 +701,7 @@ public class SitecoreTokenServiceTests : IDisposable
         var cacheSize = _mockTokenCache.CacheSize;
         cacheSize.ShouldBeLessThanOrEqualTo(10); // Should not exceed reasonable cache size
     }
-    
+
     public void Dispose()
     {
         _httpClient?.Dispose();
@@ -711,9 +711,9 @@ public class SitecoreTokenServiceTests : IDisposable
 
 public class TestHttpMessageHandler : HttpMessageHandler
 {
-    private readonly Queue<Func<HttpResponseMessage>> _responseFactories = new();
+    private readonly Queue<Func<Task<HttpResponseMessage>>> _responseFactories = new();
     private readonly List<HttpRequestMessage> _requests = new();
-    private Func<HttpResponseMessage>? _defaultResponseFactory;
+    private Func<Task<HttpResponseMessage>>? _defaultResponseFactory;
 
     public int RequestCount => _requests.Count;
     public HttpRequestMessage? LastRequest => _requests.LastOrDefault();
@@ -722,7 +722,7 @@ public class TestHttpMessageHandler : HttpMessageHandler
     public void SetResponse(HttpResponseMessage response)
     {
         _responseFactories.Clear();
-        _defaultResponseFactory = () => CloneResponse(response);
+        _defaultResponseFactory = () => CloneResponseAsync(response);
     }
 
     public void SetResponses(params HttpResponseMessage[] responses)
@@ -732,14 +732,14 @@ public class TestHttpMessageHandler : HttpMessageHandler
         foreach (var response in responses)
         {
             var responseToClone = response;
-            _responseFactories.Enqueue(() => CloneResponse(responseToClone));
+            _responseFactories.Enqueue(() => CloneResponseAsync(responseToClone));
         }
     }
 
-    private static HttpResponseMessage CloneResponse(HttpResponseMessage original)
+    private static async Task<HttpResponseMessage> CloneResponseAsync(HttpResponseMessage original)
     {
         var clone = new HttpResponseMessage(original.StatusCode);
-        
+
         // Clone headers
         foreach (var header in original.Headers)
         {
@@ -749,9 +749,9 @@ public class TestHttpMessageHandler : HttpMessageHandler
         // Clone content if it exists
         if (original.Content != null)
         {
-            var contentBytes = original.Content.ReadAsByteArrayAsync().Result;
+            var contentBytes = await original.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             clone.Content = new ByteArrayContent(contentBytes);
-            
+
             // Clone content headers
             foreach (var header in original.Content.Headers)
             {
@@ -769,12 +769,12 @@ public class TestHttpMessageHandler : HttpMessageHandler
         if (_responseFactories.Count > 0)
         {
             var responseFactory = _responseFactories.Dequeue();
-            return Task.FromResult(responseFactory());
+            return responseFactory();
         }
-        
+
         if (_defaultResponseFactory != null)
         {
-            return Task.FromResult(_defaultResponseFactory());
+            return _defaultResponseFactory();
         }
 
         throw new InvalidOperationException("No response configured for request");
