@@ -14,9 +14,4 @@ internal static class Constants
     /// The grant type used for Sitecore authentication.
     /// </summary>
     internal const string SitecoreAuthGrantType = "client_credentials";
-    
-    /// <summary>
-    /// The URL endpoint for obtaining Sitecore authentication tokens.
-    /// </summary>
-    internal const string SitecoreCloudAuthTokenUrl = "https://auth.sitecorecloud.io/oauth/token";
 }
