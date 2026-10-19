@@ -28,5 +28,6 @@
     
     <!-- Build and analysis tools -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Build.Tasks.Git" Version="8.0.1" />
   </ItemGroup>
 </Project>
