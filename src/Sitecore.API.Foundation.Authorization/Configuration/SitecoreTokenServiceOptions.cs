@@ -1,5 +1,3 @@
-using System;
-
 namespace Sitecore.API.Foundation.Authorization.Configuration;
 
 /// <summary>
@@ -20,7 +18,7 @@ public class SitecoreTokenServiceOptions
     /// <summary>
     /// Interval between automatic cleanups. Default is 5 minutes.
     /// </summary>
-    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromMinutes(5);
+    public System.TimeSpan CleanupInterval { get; set; } = System.TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// The URL endpoint for obtaining Sitecore authentication tokens. 
