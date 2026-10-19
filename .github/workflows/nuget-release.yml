@@ -31,7 +31,7 @@ jobs:
 
       # Restore dependencies
       - name: Restore dependencies
-        run: dotnet restore --warnaserror:false
+        run: dotnet restore
 
       # Build main library for net8.0
       - name: Build main library (net8.0)
