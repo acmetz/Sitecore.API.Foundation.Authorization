@@ -237,10 +237,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             _keycloakFixture.ClientId,
             _keycloakFixture.ClientSecret);
 
-        // Prime the cache with one awaited call so the following concurrent reads exercise the cache-hit path.
-        var firstToken = await updatedTokenService.GetSitecoreAuthToken(credentials);
-
-        // Act - Make multiple concurrent requests against the already populated cache.
+        // Act - Make multiple concurrent requests
         var tasks = new[]
         {
             updatedTokenService.GetSitecoreAuthToken(credentials),
@@ -259,12 +256,14 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             result.AccessToken.ShouldNotBeEmpty();
         }
 
+        // All results should be the same due to caching
+        var firstToken = results[0];
         foreach (var result in results)
         {
             result.ShouldBe(firstToken);
         }
 
-        _output.WriteLine($"✅ All {results.Length} concurrent requests to Keycloak returned the same cached token");
+        _output.WriteLine($"? All {results.Length} concurrent requests to Keycloak returned the same cached token");
     }
 
     [Fact]
@@ -298,7 +297,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         var exception = await Should.ThrowAsync<Exception>(
             () => updatedTokenService.GetSitecoreAuthToken(invalidCredentials));
 
-        _output.WriteLine($"✅ Correctly rejected invalid credentials by Keycloak: {exception.Message}");
+        _output.WriteLine($"? Correctly rejected invalid credentials by Keycloak: {exception.Message}");
     }
 
     [Fact]
@@ -339,7 +338,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
 
         // Note: Since Keycloak could return the same token if refresh logic isn't strictly forcing new one,
         // we at least ensure it returns a valid token.
-        _output.WriteLine("✅ Successfully refreshed token with Keycloak");
+        _output.WriteLine($"? Successfully refreshed token with Keycloak");
     }
 
 }

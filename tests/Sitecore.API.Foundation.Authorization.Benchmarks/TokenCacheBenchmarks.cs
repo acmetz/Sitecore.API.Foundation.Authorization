@@ -11,7 +11,6 @@ namespace Sitecore.API.Foundation.Authorization.Benchmarks;
 [MemoryDiagnoser]
 [SimpleJob(RuntimeMoniker.Net80)]
 [SimpleJob(RuntimeMoniker.Net90)]
-[SimpleJob(RuntimeMoniker.Net10_0)]
 public class TokenCacheBenchmarks
 {
     private SitecoreTokenCache? _cache;
@@ -35,6 +34,20 @@ public class TokenCacheBenchmarks
 
         // Pre-populate for GetToken and ReplaceToken
         _cache.SetToken(_credentials, _token);
+    }
+
+    [IterationSetup(Target = nameof(AddToken))]
+    public void IterationSetupForAdd()
+    {
+        // AddToken test should ideally happen on a cache without the exact same token to measure setting it
+        var options = Options.Create(new SitecoreTokenServiceOptions
+        {
+            MaxCacheSize = 1000,
+            CleanupThreshold = 1000,
+            CleanupInterval = TimeSpan.FromMinutes(5)
+        });
+
+        _cache = new SitecoreTokenCache(options);
     }
 
     [Benchmark]
