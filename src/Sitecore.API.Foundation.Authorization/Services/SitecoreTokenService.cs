@@ -80,7 +80,8 @@ public class SitecoreTokenService : ISitecoreTokenService
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}.", (int)response.StatusCode, _options.AuthTokenUrl);
+            var body = await SafeReadBodyAsync(response);
+            _logger?.LogWarning("Authentication request failed with status {StatusCode} for {AuthUrl}. Body: {Body}", (int)response.StatusCode, _options.AuthTokenUrl, body);
             throw new SitecoreAuthHttpException((int)response.StatusCode, _options.AuthTokenUrl,
                 $"Failed to get auth token. Received {response.StatusCode} from {_options.AuthTokenUrl}.");
         }
@@ -92,19 +93,21 @@ public class SitecoreTokenService : ISitecoreTokenService
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}.", credentials.ClientId);
+            var raw = await SafeReadBodyAsync(response);
+            _logger?.LogError(ex, "Failed to parse authentication response for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to parse auth response.", ex);
         }
         
         if (result is null || string.IsNullOrEmpty(result.access_token))
         {
-            _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}.", credentials.ClientId);
+            var raw = await SafeReadBodyAsync(response);
+            _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to read auth token from response or token is not set.");
         }
-        
+
         var goodUntil = DateTimeOffset.UtcNow.AddSeconds(result.expires_in);
         var sitecoreToken = new SitecoreAuthToken(result.access_token, goodUntil);
-        
+
         // Cache the new token
         _tokenCache.SetToken(credentials, sitecoreToken);
         _logger?.LogInformation("Token acquired and cached until {Expiration:o} for clientId {ClientId}.", sitecoreToken.Expiration, credentials.ClientId);
@@ -133,4 +136,15 @@ public class SitecoreTokenService : ISitecoreTokenService
         return await GetSitecoreAuthToken(credentials.Value);
     }
 
+    private static async Task<string> SafeReadBodyAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            return await response.Content.ReadAsStringAsync();
+        }
+        catch
+        {
+            return "<unavailable>";
+        }
+    }
 }
