@@ -237,7 +237,10 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             _keycloakFixture.ClientId,
             _keycloakFixture.ClientSecret);
 
-        // Act - Make multiple concurrent requests
+        // Prime the cache with a single awaited request so the concurrent reads hit the cache
+        await updatedTokenService.GetSitecoreAuthToken(credentials);
+
+        // Act - Make multiple concurrent requests that should all hit the primed cache
         var tasks = new[]
         {
             updatedTokenService.GetSitecoreAuthToken(credentials),
