@@ -85,10 +85,12 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             CleanupInterval = TimeSpan.FromMinutes(5)
         });
         
-        var updatedTokenService = new SitecoreTokenService(_httpClient, _tokenCache, updatedOptions);
-        
+        // Use a clean cache for this test so we can measure the concurrent set behaviour accurately without priming
+        var cleanCache = new SitecoreTokenCache(updatedOptions);
+        var updatedTokenService = new SitecoreTokenService(_httpClient, cleanCache, updatedOptions);
+
         var credentials = new SitecoreAuthClientCredentials(
-            _keycloakFixture.ClientId, 
+            _keycloakFixture.ClientId,
             _keycloakFixture.ClientSecret);
 
         // This would fail due to format mismatch, but demonstrates the integration pattern
@@ -231,16 +233,15 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             CleanupInterval = TimeSpan.FromMinutes(5)
         });
 
-        var updatedTokenService = new SitecoreTokenService(_httpClient, _tokenCache, updatedOptions);
+        // Use a clean cache for this test so we can measure the concurrent set behaviour accurately without priming
+        var cleanCache = new SitecoreTokenCache(updatedOptions);
+        var updatedTokenService = new SitecoreTokenService(_httpClient, cleanCache, updatedOptions);
 
         var credentials = new SitecoreAuthClientCredentials(
             _keycloakFixture.ClientId,
             _keycloakFixture.ClientSecret);
 
-        // Prime the cache with a single awaited request so the concurrent reads hit the cache
-        await updatedTokenService.GetSitecoreAuthToken(credentials);
-
-        // Act - Make multiple concurrent requests that should all hit the primed cache
+        // Act - Make multiple concurrent requests
         var tasks = new[]
         {
             updatedTokenService.GetSitecoreAuthToken(credentials),
@@ -324,7 +325,9 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             CleanupInterval = TimeSpan.FromMinutes(5)
         });
 
-        var updatedTokenService = new SitecoreTokenService(_httpClient, _tokenCache, updatedOptions);
+        // Use a clean cache for this test so we can measure the concurrent set behaviour accurately without priming
+        var cleanCache = new SitecoreTokenCache(updatedOptions);
+        var updatedTokenService = new SitecoreTokenService(_httpClient, cleanCache, updatedOptions);
 
         var credentials = new SitecoreAuthClientCredentials(
             _keycloakFixture.ClientId,
