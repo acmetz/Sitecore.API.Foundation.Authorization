@@ -33,14 +33,7 @@ public static class ServiceCollectionExtensions
             services.Configure<SitecoreTokenServiceOptions>(_ => { });
         }
 
-        // Register HttpClient if not already registered
-        services.AddHttpClient();
-
-        // Register cache as singleton (shared across all requests)
-        services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
-
-        // Register service as scoped (new instance per request/scope)
-        services.TryAddScoped<ISitecoreTokenService, SitecoreTokenService>();
+        AddCoreServices(services, ServiceLifetime.Scoped);
 
         return services;
     }
@@ -61,14 +54,7 @@ public static class ServiceCollectionExtensions
         services.Configure<SitecoreTokenServiceOptions>(
             configuration.GetSection(sectionName));
 
-        // Register HttpClient if not already registered
-        services.AddHttpClient();
-
-        // Register cache as singleton (shared across all requests)
-        services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
-
-        // Register service as scoped (new instance per request/scope)
-        services.TryAddScoped<ISitecoreTokenService, SitecoreTokenService>();
+        AddCoreServices(services, ServiceLifetime.Scoped);
 
         return services;
     }
@@ -94,14 +80,7 @@ public static class ServiceCollectionExtensions
             services.Configure<SitecoreTokenServiceOptions>(_ => { });
         }
 
-        // Register HttpClient if not already registered
-        services.AddHttpClient();
-
-        // Register cache as singleton
-        services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
-
-        // Register service as singleton
-        services.TryAddSingleton<ISitecoreTokenService, SitecoreTokenService>();
+        AddCoreServices(services, ServiceLifetime.Singleton);
 
         return services;
     }
@@ -122,15 +101,23 @@ public static class ServiceCollectionExtensions
         services.Configure<SitecoreTokenServiceOptions>(
             configuration.GetSection(sectionName));
 
+        AddCoreServices(services, ServiceLifetime.Singleton);
+
+        return services;
+    }
+
+    private static void AddCoreServices(IServiceCollection services, ServiceLifetime lifetime)
+    {
         // Register HttpClient if not already registered
         services.AddHttpClient();
 
-        // Register cache as singleton
+        // Register cache as singleton (shared across all requests)
         services.TryAddSingleton<ISitecoreTokenCache, SitecoreTokenCache>();
 
-        // Register service as singleton
-        services.TryAddSingleton<ISitecoreTokenService, SitecoreTokenService>();
-
-        return services;
+        // Register service with the specified lifetime
+        services.TryAdd(new ServiceDescriptor(
+            typeof(ISitecoreTokenService),
+            typeof(SitecoreTokenService),
+            lifetime));
     }
 }
