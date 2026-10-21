@@ -53,7 +53,8 @@ public class TokenCacheBenchmarks
     [Benchmark]
     public void AddToken()
     {
-        _cache!.SetToken(_credentials, _token);
+        var credentials = new SitecoreAuthClientCredentials($"{ClientId}-{Guid.NewGuid():N}", "test-secret");
+        _cache!.SetToken(credentials, _token);
     }
 
     [Benchmark]
