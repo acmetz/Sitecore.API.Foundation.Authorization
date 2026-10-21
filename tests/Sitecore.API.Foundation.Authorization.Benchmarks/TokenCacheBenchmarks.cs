@@ -11,6 +11,8 @@ namespace Sitecore.API.Foundation.Authorization.Benchmarks;
 [MemoryDiagnoser]
 [SimpleJob(RuntimeMoniker.Net80)]
 [SimpleJob(RuntimeMoniker.Net90)]
+
+
 public class TokenCacheBenchmarks
 {
     private SitecoreTokenCache? _cache;
@@ -53,8 +55,7 @@ public class TokenCacheBenchmarks
     [Benchmark]
     public void AddToken()
     {
-        var credentials = new SitecoreAuthClientCredentials($"{ClientId}-{Guid.NewGuid():N}", "test-secret");
-        _cache!.SetToken(credentials, _token);
+        _cache!.SetToken(_credentials, _token);
     }
 
     [Benchmark]
