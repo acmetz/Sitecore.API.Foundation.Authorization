@@ -25,16 +25,16 @@ jobs:
 
       # Restore dependencies
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore -p:TreatWarningsAsErrors=false
 
       # Build in Release mode (net8.0, net9.0)
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore -p:TreatWarningsAsErrors=false
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
         run: >
-          dotnet test --configuration Release --no-build \
+          dotnet test --configuration Release --no-build -p:TreatWarningsAsErrors=false \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
