@@ -20,4 +20,13 @@ public readonly record struct SitecoreAuthClientCredentials(string ClientId, str
     public string ClientSecret { get; } = !string.IsNullOrEmpty(ClientSecret) 
         ? ClientSecret 
         : throw new ArgumentNullException(nameof(ClientSecret));
+
+    /// <summary>
+    /// Returns a string that represents the current object, masking the client secret.
+    /// </summary>
+    /// <returns>A string that represents the current object.</returns>
+    public override string ToString()
+    {
+        return $"SitecoreAuthClientCredentials {{ ClientId = {ClientId}, ClientSecret = *** }}";
+    }
 }
