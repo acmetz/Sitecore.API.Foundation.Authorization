@@ -79,14 +79,16 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     public SitecoreAuthClientCredentials? RemoveToken(SitecoreAuthToken token)
     {
-        var keyToRemove = _tokens.FirstOrDefault(kvp => kvp.Value.Equals(token)).Key;
-        bool found = !EqualityComparer<SitecoreAuthClientCredentials>.Default.Equals(keyToRemove, default);
-        if (!found) return null;
-
-        if (_tokens.TryRemove(keyToRemove, out _))
+        foreach (var kvp in _tokens)
         {
-            _logger?.LogInformation("Removed token for clientId {ClientId} from cache.", keyToRemove.ClientId);
-            return keyToRemove;
+            if (kvp.Value.Equals(token))
+            {
+                if (_tokens.TryRemove(kvp.Key, out _))
+                {
+                    _logger?.LogInformation("Removed token for clientId {ClientId} from cache.", kvp.Key.ClientId);
+                    return kvp.Key;
+                }
+            }
         }
 
         return null;
@@ -105,14 +107,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         _cleanupLock.EnterWriteLock();
         try
         {
-            var before = _tokens.Count;
-            CleanupExpiredTokensUnsafe();
-            var removed = before - _tokens.Count;
-            if (removed > 0)
-            {
-                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
-            }
-            LastCleanup = DateTimeOffset.UtcNow;
+            ExecuteCleanupUnsafe();
         }
         finally
         {
@@ -147,19 +142,24 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         {
             if (!ShouldPerformCleanup()) return;
 
-            var before = _tokens.Count;
-            CleanupExpiredTokensUnsafe();
-            var removed = before - _tokens.Count;
-            if (removed > 0)
-            {
-                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
-            }
-            LastCleanup = DateTimeOffset.UtcNow;
+            ExecuteCleanupUnsafe();
         }
         finally
         {
             _cleanupLock.ExitWriteLock();
         }
+    }
+
+    private void ExecuteCleanupUnsafe()
+    {
+        var before = _tokens.Count;
+        CleanupExpiredTokensUnsafe();
+        var removed = before - _tokens.Count;
+        if (removed > 0)
+        {
+            _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
+        }
+        LastCleanup = DateTimeOffset.UtcNow;
     }
 
     private void CleanupExpiredTokensUnsafe()
