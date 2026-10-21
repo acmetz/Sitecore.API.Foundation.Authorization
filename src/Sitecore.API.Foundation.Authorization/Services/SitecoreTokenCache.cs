@@ -168,7 +168,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         {
             if (kvp.Value.IsExpired)
             {
-                _tokens.TryRemove(kvp.Key, out _);
+                _tokens.TryRemove(kvp);
             }
         }
     }
