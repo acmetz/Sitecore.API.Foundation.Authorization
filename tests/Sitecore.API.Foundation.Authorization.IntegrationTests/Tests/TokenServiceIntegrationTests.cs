@@ -233,7 +233,8 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             CleanupInterval = TimeSpan.FromMinutes(5)
         });
 
-        // Use a clean cache for this test so we can measure the concurrent set behaviour accurately without priming
+        // Use a clean cache and prime it with a single awaited request so the
+        // concurrent reads below exercise the cache-hit path instead of racing cache misses
         var cleanCache = new SitecoreTokenCache(updatedOptions);
         var updatedTokenService = new SitecoreTokenService(_httpClient, cleanCache, updatedOptions);
 
@@ -241,7 +242,10 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
             _keycloakFixture.ClientId,
             _keycloakFixture.ClientSecret);
 
-        // Act - Make multiple concurrent requests
+        // Prime the cache so the subsequent concurrent requests hit the cached token
+        await updatedTokenService.GetSitecoreAuthToken(credentials);
+
+        // Act - Make multiple concurrent requests that should all return the cached token
         var tasks = new[]
         {
             updatedTokenService.GetSitecoreAuthToken(credentials),
