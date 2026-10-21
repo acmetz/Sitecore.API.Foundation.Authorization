@@ -79,14 +79,16 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     public SitecoreAuthClientCredentials? RemoveToken(SitecoreAuthToken token)
     {
-        var keyToRemove = _tokens.FirstOrDefault(kvp => kvp.Value.Equals(token)).Key;
-        bool found = !EqualityComparer<SitecoreAuthClientCredentials>.Default.Equals(keyToRemove, default);
-        if (!found) return null;
-
-        if (_tokens.TryRemove(keyToRemove, out _))
+        foreach (var kvp in _tokens)
         {
-            _logger?.LogInformation("Removed token for clientId {ClientId} from cache.", keyToRemove.ClientId);
-            return keyToRemove;
+            if (kvp.Value.Equals(token))
+            {
+                if (_tokens.TryRemove(kvp.Key, out _))
+                {
+                    _logger?.LogInformation("Removed token for clientId {ClientId} from cache.", kvp.Key.ClientId);
+                    return kvp.Key;
+                }
+            }
         }
 
         return null;
