@@ -10,7 +10,7 @@
     <!-- Test Configuration -->
     <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
     <RunCodeAnalysis>false</RunCodeAnalysis>
-    
+
     <!-- Suppress BouncyCastle vulnerability warning - we've mitigated by using latest available version -->
     <NoWarn>$(NoWarn);NU1902</NoWarn>
   </PropertyGroup>

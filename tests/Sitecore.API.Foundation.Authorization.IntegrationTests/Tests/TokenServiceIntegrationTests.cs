@@ -86,9 +86,9 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         });
         
         var updatedTokenService = new SitecoreTokenService(_httpClient, _tokenCache, updatedOptions);
-        
+
         var credentials = new SitecoreAuthClientCredentials(
-            _keycloakFixture.ClientId, 
+            _keycloakFixture.ClientId,
             _keycloakFixture.ClientSecret);
 
         // This would fail due to format mismatch, but demonstrates the integration pattern
