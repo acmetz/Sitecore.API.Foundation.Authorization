@@ -1,3 +1,4 @@
+using System;
 using Sitecore.API.Foundation.Authorization.Models;
 
 namespace Sitecore.API.Foundation.Authorization.Abstractions;
@@ -5,7 +6,7 @@ namespace Sitecore.API.Foundation.Authorization.Abstractions;
 /// <summary>
 /// Interface for managing Sitecore authentication token cache operations.
 /// </summary>
-public interface ISitecoreTokenCache : System.IDisposable
+public interface ISitecoreTokenCache : IDisposable
 {
     /// <summary>
     /// Gets the current number of tokens in the cache.
