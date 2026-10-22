@@ -196,11 +196,16 @@ public class SitecoreTokenCache : ISitecoreTokenCache
     {
         var tokensToRemove = _tokens.Count - _options.MaxCacheSize;
         if (tokensToRemove <= 0 || _tokens.Count == 0) return;
-        var keysToRemove = _tokens
+
+        // Use ToArray to prevent collection modified enumeration issues
+        var snapshot = _tokens.ToArray();
+
+        var keysToRemove = snapshot
             .OrderBy(kvp => kvp.Value.Expiration)
-            .Take(Math.Min(tokensToRemove, _tokens.Count))
+            .Take(Math.Min(tokensToRemove, snapshot.Length))
             .Select(kvp => kvp.Key)
             .ToList();
+
         foreach (var key in keysToRemove)
         {
             _tokens.TryRemove(key, out _);
