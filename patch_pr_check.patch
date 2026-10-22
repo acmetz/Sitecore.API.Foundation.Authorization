@@ -1,0 +1,15 @@
+diff --git a/.github/workflows/pr-check.yml b/.github/workflows/pr-check.yml
+--- a/.github/workflows/pr-check.yml
++++ b/.github/workflows/pr-check.yml
+@@ -28,11 +28,7 @@ jobs:
+
+       # Build in Release mode (net8.0, net9.0)
+       - name: Build
+-<<<<<<< HEAD
+         run: dotnet build --configuration Release -p:TreatWarningsAsErrors=false --no-restore
+-=======
+-        run: dotnet build --configuration Release --no-restore -p:TreatWarningsAsErrors=false
+->>>>>>> origin/main
+
+       # Run tests with coverage (skip Docker-related tests)
+       - name: Test with coverage (skip Docker integration)

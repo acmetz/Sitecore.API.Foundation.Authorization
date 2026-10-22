@@ -1,0 +1,22 @@
+diff --git a/.github/workflows/nuget-release.yml b/.github/workflows/nuget-release.yml
+--- a/.github/workflows/nuget-release.yml
++++ b/.github/workflows/nuget-release.yml
+@@ -34,17 +34,9 @@ jobs:
+
+       # Build main library for net8.0
+       - name: Build main library (net8.0)
+-<<<<<<< HEAD
+         run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net8.0 -p:TreatWarningsAsErrors=false --no-restore
+
+       # Build main library for net9.0
+       - name: Build main library (net9.0)
+         run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net9.0 -p:TreatWarningsAsErrors=false --no-restore
+-=======
+-        run: dotnet build -p:TreatWarningsAsErrors=false src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net8.0 --no-restore
+-
+-      # Build main library for net9.0
+-      - name: Build main library (net9.0)
+-        run: dotnet build -p:TreatWarningsAsErrors=false src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net9.0 --no-restore
+->>>>>>> origin/main
+
+       # Run tests with coverage (skip Docker-related tests)

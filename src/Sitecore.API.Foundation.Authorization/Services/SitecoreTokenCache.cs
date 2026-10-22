@@ -191,16 +191,35 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     private void EvictOldestTokensUnsafe()
     {
-        var tokensToRemove = _tokens.Count - _options.MaxCacheSize;
-        if (tokensToRemove <= 0 || _tokens.Count == 0) return;
-        var keysToRemove = _tokens
-            .OrderBy(kvp => kvp.Value.Expiration)
-            .Take(Math.Min(tokensToRemove, _tokens.Count))
-            .Select(kvp => kvp.Key)
-            .ToList();
-        foreach (var key in keysToRemove)
+        var tokensToRemove = Math.Min(_tokens.Count - _options.MaxCacheSize, _tokens.Count);
+        if (tokensToRemove <= 0) return;
+
+        // Use a PriorityQueue as a max-heap (largest expiration time at the top)
+        // We only keep 'tokensToRemove' elements in the queue, retaining the oldest (smallest expiration time) tokens.
+        var pq = new PriorityQueue<SitecoreAuthClientCredentials, long>(
+            tokensToRemove,
+            Comparer<long>.Create((a, b) => b.CompareTo(a)));
+
+        foreach (var kvp in _tokens)
         {
-            _tokens.TryRemove(key, out _);
+            var ticks = kvp.Value.Expiration.UtcTicks;
+            if (pq.Count < tokensToRemove)
+            {
+                pq.Enqueue(kvp.Key, ticks);
+            }
+            else
+            {
+                pq.TryPeek(out _, out var maxPriority);
+                if (ticks < maxPriority)
+                {
+                    pq.DequeueEnqueue(kvp.Key, ticks);
+                }
+            }
+        }
+
+        while (pq.Count > 0)
+        {
+            _tokens.TryRemove(pq.Dequeue(), out _);
         }
     }
 

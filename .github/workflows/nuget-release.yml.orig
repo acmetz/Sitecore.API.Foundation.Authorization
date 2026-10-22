@@ -1,0 +1,142 @@
+# CI/CD Pipeline for C# Library Distributed via NuGet
+# This workflow builds, tests, runs code coverage, packages, and publishes to NuGet.
+# It supports multi-target frameworks and follows open-source best practices.
+
+name: NuGet Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup .NET
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      # Restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore -p:TreatWarningsAsErrors=false
+
+      # Build main library for net8.0
+      - name: Build main library (net8.0)
+<<<<<<< HEAD
+        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net8.0 -p:TreatWarningsAsErrors=false --no-restore
+
+      # Build main library for net9.0
+      - name: Build main library (net9.0)
+        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net9.0 -p:TreatWarningsAsErrors=false --no-restore
+=======
+        run: dotnet build -p:TreatWarningsAsErrors=false src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net8.0 --no-restore
+
+      # Build main library for net9.0
+      - name: Build main library (net9.0)
+        run: dotnet build -p:TreatWarningsAsErrors=false src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net9.0 --no-restore
+>>>>>>> origin/main
+
+      # Run tests with coverage (skip Docker-related tests)
+      - name: Test with coverage (skip Docker integration)
+        run: >
+          dotnet test --configuration Release -p:TreatWarningsAsErrors=false \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
+
+      - name: Install ReportGenerator
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+
+      # Convert coverage to cobertura format
+      - name: Convert coverage to cobertura
+        run: |
+          ~/.dotnet/tools/reportgenerator -reports:./TestResults/**/coverage.cobertura.xml \
+            -targetdir:./TestResults/CoverageReport \
+            -reporttypes:Cobertura
+        continue-on-error: true
+
+      # Upload coverage to Codecov (optional)
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./TestResults/CoverageReport/Cobertura.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+      # Package NuGet from the project (ensure PackageId matches expected output name)
+      - name: Pack NuGet package
+        run: dotnet pack src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TreatWarningsAsErrors=false --output ./nupkgs
+
+      # Upload build artifacts
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs
+          path: ./nupkgs/SitecoreAPIAuthorization*.nupkg
+
+  release:
+    name: Release and Publish
+    needs: build-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup .NET
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      # Download NuGet package artifact
+      - name: Download NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: nupkgs
+          path: ./nupkgs
+
+      # Semantic versioning and changelog
+      - name: Generate changelog and version
+        uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml
+
+      # Publish to NuGet
+      - name: Publish to NuGet
+        run: dotnet nuget push ./nupkgs/SitecoreAPIAuthorization*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+      # Create or Update GitHub Release
+      - name: Create or Update GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          bodyFile: CHANGELOG.md
+          artifacts: ./nupkgs/SitecoreAPIAuthorization*.nupkg
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
