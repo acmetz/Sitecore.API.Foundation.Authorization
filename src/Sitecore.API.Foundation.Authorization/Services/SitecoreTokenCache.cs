@@ -202,7 +202,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
         foreach (var kvp in _tokens)
         {
-            var ticks = kvp.Value.Expiration.Ticks;
+            var ticks = kvp.Value.Expiration.UtcTicks;
             if (pq.Count < tokensToRemove)
             {
                 pq.Enqueue(kvp.Key, ticks);
