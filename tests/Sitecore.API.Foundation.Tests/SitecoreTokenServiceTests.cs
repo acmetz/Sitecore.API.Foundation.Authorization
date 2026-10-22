@@ -711,9 +711,9 @@ public class SitecoreTokenServiceTests : IDisposable
 
 public class TestHttpMessageHandler : HttpMessageHandler
 {
-    private readonly Queue<Func<Task<HttpResponseMessage>>> _responseFactories = new();
+    private readonly Queue<Func<HttpResponseMessage>> _responseFactories = new();
     private readonly List<HttpRequestMessage> _requests = new();
-    private Func<Task<HttpResponseMessage>>? _defaultResponseFactory;
+    private Func<HttpResponseMessage>? _defaultResponseFactory;
 
     public int RequestCount => _requests.Count;
     public HttpRequestMessage? LastRequest => _requests.LastOrDefault();
@@ -722,7 +722,7 @@ public class TestHttpMessageHandler : HttpMessageHandler
     public void SetResponse(HttpResponseMessage response)
     {
         _responseFactories.Clear();
-        _defaultResponseFactory = () => CloneResponseAsync(response);
+        _defaultResponseFactory = () => CloneResponse(response);
     }
 
     public void SetResponses(params HttpResponseMessage[] responses)
@@ -732,11 +732,11 @@ public class TestHttpMessageHandler : HttpMessageHandler
         foreach (var response in responses)
         {
             var responseToClone = response;
-            _responseFactories.Enqueue(() => CloneResponseAsync(responseToClone));
+            _responseFactories.Enqueue(() => CloneResponse(responseToClone));
         }
     }
 
-    private static async Task<HttpResponseMessage> CloneResponseAsync(HttpResponseMessage original)
+    private static HttpResponseMessage CloneResponse(HttpResponseMessage original)
     {
         var clone = new HttpResponseMessage(original.StatusCode);
 
@@ -749,7 +749,7 @@ public class TestHttpMessageHandler : HttpMessageHandler
         // Clone content if it exists
         if (original.Content != null)
         {
-            var contentBytes = await original.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            var contentBytes = original.Content.ReadAsByteArrayAsync().Result;
             clone.Content = new ByteArrayContent(contentBytes);
 
             // Clone content headers
@@ -769,12 +769,12 @@ public class TestHttpMessageHandler : HttpMessageHandler
         if (_responseFactories.Count > 0)
         {
             var responseFactory = _responseFactories.Dequeue();
-            return responseFactory();
+            return Task.FromResult(responseFactory());
         }
 
         if (_defaultResponseFactory != null)
         {
-            return _defaultResponseFactory();
+            return Task.FromResult(_defaultResponseFactory());
         }
 
         throw new InvalidOperationException("No response configured for request");

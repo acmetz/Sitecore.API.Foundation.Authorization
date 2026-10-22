@@ -321,7 +321,8 @@ public class KeycloakTestFixture : IAsyncDisposable
     /// </summary>
     private async Task StartKeycloakContainerAsync()
     {
-        _keycloakContainer = new ContainerBuilder().WithImage(_selectedImage!)
+        _keycloakContainer = new ContainerBuilder()
+            .WithImage(_selectedImage!)
             .WithPortBinding(KeycloakPort, true)
             .WithEnvironment("KEYCLOAK_ADMIN", "admin")
             .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", "admin")

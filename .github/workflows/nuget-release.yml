@@ -35,16 +35,16 @@ jobs:
 
       # Build main library for net8.0
       - name: Build main library (net8.0)
-        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net8.0 -p:TreatWarningsAsErrors=false --no-restore
+        run: dotnet build -p:TreatWarningsAsErrors=false src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net8.0 --no-restore
 
       # Build main library for net9.0
       - name: Build main library (net9.0)
-        run: dotnet build src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net9.0 -p:TreatWarningsAsErrors=false --no-restore
+        run: dotnet build -p:TreatWarningsAsErrors=false src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj --configuration Release -p:TargetFramework=net9.0 --no-restore
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
         run: >
-          dotnet test --configuration Release -p:TreatWarningsAsErrors=false \
+          dotnet test --configuration Release \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
