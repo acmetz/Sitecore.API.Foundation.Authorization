@@ -104,10 +104,10 @@ public class SitecoreTokenService : ISitecoreTokenService
             _logger?.LogError("Authentication response was empty or missing access_token for clientId {ClientId}. Raw: {Raw}", credentials.ClientId, raw);
             throw new SitecoreAuthResponseException("Failed to read auth token from response or token is not set.");
         }
-        
+
         var goodUntil = DateTimeOffset.UtcNow.AddSeconds(result.expires_in);
         var sitecoreToken = new SitecoreAuthToken(result.access_token, goodUntil);
-        
+
         // Cache the new token
         _tokenCache.SetToken(credentials, sitecoreToken);
         _logger?.LogInformation("Token acquired and cached until {Expiration:o} for clientId {ClientId}.", sitecoreToken.Expiration, credentials.ClientId);
