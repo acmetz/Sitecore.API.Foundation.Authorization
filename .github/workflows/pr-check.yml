@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     name: Build and Test (No Docker)
@@ -21,19 +24,22 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
       # Restore dependencies
       - name: Restore dependencies
         run: dotnet restore -p:TreatWarningsAsErrors=false
 
-      # Build in Release mode (net8.0, net9.0)
+      # Build in Release mode (net8.0, net9.0, net10.0)
       - name: Build
         run: dotnet build --configuration Release --no-restore -p:TreatWarningsAsErrors=false
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
-        run: >
+        run: |
           dotnet test --configuration Release --no-build -p:TreatWarningsAsErrors=false \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
