@@ -54,7 +54,7 @@ jobs:
           dotnet test --configuration Release -p:TreatWarningsAsErrors=false \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
-            --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
+            --filter "FullyQualifiedName!~TokenServiceIntegrationTests"
 
       - name: Install ReportGenerator
         run: dotnet tool install -g dotnet-reportgenerator-globaltool

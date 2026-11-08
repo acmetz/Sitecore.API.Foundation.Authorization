@@ -12,6 +12,18 @@ permissions:
   contents: read
 
 jobs:
+  lint-workflows:
+    name: Lint GitHub Workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        run: |
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
   build-test:
     name: Build and Test (No Docker)
     runs-on: ubuntu-latest
@@ -43,6 +55,6 @@ jobs:
           dotnet test --configuration Release --no-build -p:TreatWarningsAsErrors=false \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
-            --filter "FullyQualifiedName~MockIntegrationTests|FullyQualifiedName~InfrastructureTests|FullyQualifiedName~UnitTests"
+            --filter "FullyQualifiedName!~TokenServiceIntegrationTests"
 
 # End of workflow file
