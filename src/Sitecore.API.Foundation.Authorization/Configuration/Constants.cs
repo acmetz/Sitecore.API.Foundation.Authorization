@@ -19,4 +19,9 @@ internal static class Constants
     /// The URL endpoint for obtaining Sitecore authentication tokens.
     /// </summary>
     internal const string SitecoreCloudAuthTokenUrl = "https://auth.sitecorecloud.io/oauth/token";
+
+    /// <summary>
+    /// The logical name of the configured <see cref="System.Net.Http.HttpClient"/> registered in dependency injection.
+    /// </summary>
+    internal const string SitecoreHttpClientName = "Sitecore.API.Foundation.Authorization.HttpClient";
 }

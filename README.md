@@ -1,8 +1,8 @@
 # Sitecore API Authorization
 
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/acmetz/Sitecore.API.Foundation.Authorization/ci.yml?branch=main)](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/actions)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/acmetz/Sitecore.API.Foundation.Authorization/pr-check.yml?label=CI)](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-![.NET](https://img.shields.io/badge/.NET-8%20%7C%209-blue)
+![.NET](https://img.shields.io/badge/.NET-8%20%7C%209%20%7C%2010-blue)
 [![NuGet](https://img.shields.io/nuget/v/SitecoreAPIAuthorization.svg)](https://www.nuget.org/packages/SitecoreAPIAuthorization)
 
 A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and comprehensive integration testing.
@@ -54,9 +54,9 @@ Service logs:
 - Token cache hit for clientId {ClientId}.
 - Requesting new token for clientId {ClientId} from {AuthUrl}.
 - Auth request payload and response status.
-- Authentication request failed with status {StatusCode} for {AuthUrl}. Body: <captured>
-- Failed to parse authentication response for clientId {ClientId}. Raw: <captured>
-- Authentication response was empty or missing access_token for clientId {ClientId}. Raw: <captured>
+- Authentication request failed with status {StatusCode} for {AuthUrl}.
+- Failed to parse authentication response for clientId {ClientId}.
+- Authentication response was empty or missing access_token for clientId {ClientId}.
 - Token acquired and cached until {Expiration} for clientId {ClientId}.
 
 Cache logs:

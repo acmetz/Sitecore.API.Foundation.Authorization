@@ -702,6 +702,134 @@ public class SitecoreTokenServiceTests : IDisposable
         cacheSize.ShouldBeLessThanOrEqualTo(10); // Should not exceed reasonable cache size
     }
 
+    [Fact]
+    public async Task GetSitecoreAuthToken_WithCancellationToken_ShouldThrowTaskCanceledException()
+    {
+        // Arrange - Pre-canceled token before any HTTP/cache operation
+        using var preCanceledCts = new CancellationTokenSource();
+        preCanceledCts.Cancel();
+
+        await Should.ThrowAsync<TaskCanceledException>(
+            () => _service.GetSitecoreAuthToken(_testCredentials, preCanceledCts.Token));
+        _mockMessageHandler.RequestCount.ShouldBe(0);
+
+        // Arrange - In-flight HTTP cancellation
+        using var timeoutHandler = new TimeoutHttpMessageHandler();
+        using var timeoutHttpClient = new HttpClient(timeoutHandler);
+        var options = Options.Create(new SitecoreTokenServiceOptions());
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(timeoutHttpClient, cache, options);
+        using var inFlightCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(15));
+
+        // Act & Assert
+        await Should.ThrowAsync<TaskCanceledException>(
+            () => service.GetSitecoreAuthToken(_testCredentials, inFlightCts.Token));
+    }
+
+    [Fact]
+    public async Task TryRefreshSitecoreAuthToken_WithCancellationToken_ShouldThrowTaskCanceledException()
+    {
+        // Arrange
+        var authResponse = new { access_token = "initial-token", expires_in = 3600 };
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(authResponse), Encoding.UTF8, "application/json")
+        };
+        _mockMessageHandler.SetResponse(httpResponse);
+
+        var initialToken = await _service.GetSitecoreAuthToken(_testCredentials);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert
+        await Should.ThrowAsync<TaskCanceledException>(
+            () => _service.TryRefreshSitecoreAuthToken(initialToken, cts.Token));
+        _mockMessageHandler.RequestCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_WithNonLoopbackHttpAuthUrl_ShouldThrowSitecoreAuthException()
+    {
+        // Arrange
+        var options = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = "http://auth.sitecorecloud.io/oauth/token"
+        });
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(_httpClient, cache, options);
+
+        // Act & Assert
+        var ex = await Should.ThrowAsync<SitecoreAuthException>(
+            () => service.GetSitecoreAuthToken(_testCredentials));
+        ex.Message.ShouldContain("HTTPS");
+        _mockMessageHandler.RequestCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_WithEmbeddedUserInfoInAuthUrl_ShouldThrowSitecoreAuthException()
+    {
+        // Arrange
+        var options = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = "https://user:embedded-secret@auth.sitecorecloud.io/oauth/token"
+        });
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(_httpClient, cache, options);
+
+        // Act & Assert
+        var ex = await Should.ThrowAsync<SitecoreAuthException>(
+            () => service.GetSitecoreAuthToken(_testCredentials));
+        ex.Message.ShouldContain("without embedded credentials");
+        ex.Message.ShouldNotContain("embedded-secret");
+        _mockMessageHandler.RequestCount.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData("http://localhost/oauth/token")]
+    [InlineData("http://127.0.0.1/oauth/token")]
+    public async Task GetSitecoreAuthToken_WithLoopbackHttpAuthUrl_ShouldSucceed(string loopbackUrl)
+    {
+        // Arrange
+        var options = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = loopbackUrl
+        });
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(_httpClient, cache, options);
+
+        var authResponse = new { access_token = "loopback-token", expires_in = 3600 };
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(authResponse), Encoding.UTF8, "application/json")
+        };
+        _mockMessageHandler.SetResponse(httpResponse);
+
+        // Act
+        var token = await service.GetSitecoreAuthToken(_testCredentials);
+
+        // Assert
+        token.AccessToken.ShouldBe("loopback-token");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task GetSitecoreAuthToken_WithNonPositiveExpiresIn_ShouldThrowSitecoreAuthResponseException(int expiresIn)
+    {
+        // Arrange
+        var authResponse = new { access_token = "test-token", expires_in = expiresIn };
+        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(authResponse), Encoding.UTF8, "application/json")
+        };
+        _mockMessageHandler.SetResponse(httpResponse);
+
+        // Act & Assert
+        var ex = await Should.ThrowAsync<SitecoreAuthResponseException>(
+            () => _service.GetSitecoreAuthToken(_testCredentials));
+        ex.Message.ShouldContain("non-positive expires_in");
+    }
+
     public void Dispose()
     {
         _httpClient?.Dispose();
@@ -711,9 +839,9 @@ public class SitecoreTokenServiceTests : IDisposable
 
 public class TestHttpMessageHandler : HttpMessageHandler
 {
-    private readonly Queue<Func<HttpResponseMessage>> _responseFactories = new();
+    private readonly Queue<Func<Task<HttpResponseMessage>>> _responseFactories = new();
     private readonly List<HttpRequestMessage> _requests = new();
-    private Func<HttpResponseMessage>? _defaultResponseFactory;
+    private Func<Task<HttpResponseMessage>>? _defaultResponseFactory;
 
     public int RequestCount => _requests.Count;
     public HttpRequestMessage? LastRequest => _requests.LastOrDefault();
@@ -722,7 +850,7 @@ public class TestHttpMessageHandler : HttpMessageHandler
     public void SetResponse(HttpResponseMessage response)
     {
         _responseFactories.Clear();
-        _defaultResponseFactory = () => CloneResponse(response);
+        _defaultResponseFactory = () => CloneResponseAsync(response);
     }
 
     public void SetResponses(params HttpResponseMessage[] responses)
@@ -732,11 +860,11 @@ public class TestHttpMessageHandler : HttpMessageHandler
         foreach (var response in responses)
         {
             var responseToClone = response;
-            _responseFactories.Enqueue(() => CloneResponse(responseToClone));
+            _responseFactories.Enqueue(() => CloneResponseAsync(responseToClone));
         }
     }
 
-    private static HttpResponseMessage CloneResponse(HttpResponseMessage original)
+    private static async Task<HttpResponseMessage> CloneResponseAsync(HttpResponseMessage original)
     {
         var clone = new HttpResponseMessage(original.StatusCode);
 
@@ -749,7 +877,7 @@ public class TestHttpMessageHandler : HttpMessageHandler
         // Clone content if it exists
         if (original.Content != null)
         {
-            var contentBytes = original.Content.ReadAsByteArrayAsync().Result;
+            var contentBytes = await original.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             clone.Content = new ByteArrayContent(contentBytes);
 
             // Clone content headers
@@ -764,17 +892,22 @@ public class TestHttpMessageHandler : HttpMessageHandler
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled<HttpResponseMessage>(cancellationToken);
+        }
+
         _requests.Add(request);
 
         if (_responseFactories.Count > 0)
         {
             var responseFactory = _responseFactories.Dequeue();
-            return Task.FromResult(responseFactory());
+            return responseFactory();
         }
 
         if (_defaultResponseFactory != null)
         {
-            return Task.FromResult(_defaultResponseFactory());
+            return _defaultResponseFactory();
         }
 
         throw new InvalidOperationException("No response configured for request");

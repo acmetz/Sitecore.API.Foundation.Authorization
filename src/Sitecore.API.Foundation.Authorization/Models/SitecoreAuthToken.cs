@@ -23,4 +23,10 @@ public readonly record struct SitecoreAuthToken(string AccessToken, DateTimeOffs
     /// Gets a value indicating whether the token has expired.
     /// </summary>
     public bool IsExpired => DateTimeOffset.UtcNow >= Expiration;
+
+    /// <summary>
+    /// Returns a string that represents the current object, masking the access token.
+    /// </summary>
+    /// <returns>A string that represents the current object.</returns>
+    public override string ToString() => $"SitecoreAuthToken {{ AccessToken = ***, Expiration = {Expiration} }}";
 }

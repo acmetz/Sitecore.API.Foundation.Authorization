@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -79,14 +78,13 @@ public class SitecoreTokenCache : ISitecoreTokenCache
 
     public SitecoreAuthClientCredentials? RemoveToken(SitecoreAuthToken token)
     {
-        var keyToRemove = _tokens.FirstOrDefault(kvp => kvp.Value.Equals(token)).Key;
-        bool found = !EqualityComparer<SitecoreAuthClientCredentials>.Default.Equals(keyToRemove, default);
-        if (!found) return null;
-
-        if (_tokens.TryRemove(keyToRemove, out _))
+        foreach (var kvp in _tokens)
         {
-            _logger?.LogInformation("Removed token for clientId {ClientId} from cache.", keyToRemove.ClientId);
-            return keyToRemove;
+            if (kvp.Value.Equals(token) && _tokens.TryRemove(kvp))
+            {
+                _logger?.LogInformation("Removed token for clientId {ClientId} from cache.", kvp.Key.ClientId);
+                return kvp.Key;
+            }
         }
 
         return null;
@@ -105,14 +103,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         _cleanupLock.EnterWriteLock();
         try
         {
-            var before = _tokens.Count;
-            CleanupExpiredTokensUnsafe();
-            var removed = before - _tokens.Count;
-            if (removed > 0)
-            {
-                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
-            }
-            LastCleanup = DateTimeOffset.UtcNow;
+            ExecuteCleanupUnsafe();
         }
         finally
         {
@@ -147,14 +138,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         {
             if (!ShouldPerformCleanup()) return;
 
-            var before = _tokens.Count;
-            CleanupExpiredTokensUnsafe();
-            var removed = before - _tokens.Count;
-            if (removed > 0)
-            {
-                _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
-            }
-            LastCleanup = DateTimeOffset.UtcNow;
+            ExecuteCleanupUnsafe();
         }
         finally
         {
@@ -162,12 +146,27 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         }
     }
 
-    private void CleanupExpiredTokensUnsafe()
+    private void ExecuteCleanupUnsafe()
     {
-        foreach (var key in _tokens.Where(kvp => kvp.Value.IsExpired).Select(kvp => kvp.Key).ToList())
+        var removed = CleanupExpiredTokensUnsafe();
+        if (removed > 0)
         {
-            _tokens.TryRemove(key, out _);
+            _logger?.LogInformation("Cleanup removed {Count} expired token(s).", removed);
         }
+        LastCleanup = DateTimeOffset.UtcNow;
+    }
+
+    private int CleanupExpiredTokensUnsafe()
+    {
+        var removed = 0;
+        foreach (var kvp in _tokens)
+        {
+            if (kvp.Value.IsExpired && _tokens.TryRemove(kvp))
+            {
+                removed++;
+            }
+        }
+        return removed;
     }
 
     private void TryEvictOldestTokens()
@@ -175,9 +174,7 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         if (!_cleanupLock.TryEnterWriteLock(TimeSpan.FromMilliseconds(50))) return;
         try
         {
-            var before = _tokens.Count;
-            EvictOldestTokensUnsafe();
-            var removed = before - _tokens.Count;
+            var removed = EvictOldestTokensUnsafe();
             if (removed > 0)
             {
                 _logger?.LogInformation("Evicted {Count} token(s) due to cache size limit.", removed);
@@ -189,14 +186,14 @@ public class SitecoreTokenCache : ISitecoreTokenCache
         }
     }
 
-    private void EvictOldestTokensUnsafe()
+    private int EvictOldestTokensUnsafe()
     {
         var tokensToRemove = Math.Min(_tokens.Count - _options.MaxCacheSize, _tokens.Count);
-        if (tokensToRemove <= 0) return;
+        if (tokensToRemove <= 0) return 0;
 
         // Use a PriorityQueue as a max-heap (largest expiration time at the top)
         // We only keep 'tokensToRemove' elements in the queue, retaining the oldest (smallest expiration time) tokens.
-        var pq = new PriorityQueue<SitecoreAuthClientCredentials, long>(
+        var pq = new PriorityQueue<KeyValuePair<SitecoreAuthClientCredentials, SitecoreAuthToken>, long>(
             tokensToRemove,
             Comparer<long>.Create((a, b) => b.CompareTo(a)));
 
@@ -205,22 +202,27 @@ public class SitecoreTokenCache : ISitecoreTokenCache
             var ticks = kvp.Value.Expiration.UtcTicks;
             if (pq.Count < tokensToRemove)
             {
-                pq.Enqueue(kvp.Key, ticks);
+                pq.Enqueue(kvp, ticks);
             }
             else
             {
                 pq.TryPeek(out _, out var maxPriority);
                 if (ticks < maxPriority)
                 {
-                    pq.DequeueEnqueue(kvp.Key, ticks);
+                    pq.DequeueEnqueue(kvp, ticks);
                 }
             }
         }
 
+        var removed = 0;
         while (pq.Count > 0)
         {
-            _tokens.TryRemove(pq.Dequeue(), out _);
+            if (_tokens.TryRemove(pq.Dequeue()))
+            {
+                removed++;
+            }
         }
+        return removed;
     }
 
     protected virtual void Dispose(bool disposing)

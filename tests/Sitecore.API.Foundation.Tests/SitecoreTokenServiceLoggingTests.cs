@@ -70,7 +70,10 @@ public class SitecoreTokenServiceLoggingTests
         var cache = Substitute.For<ISitecoreTokenCache>();
         cache.GetToken(creds).Returns((SitecoreAuthToken?)null);
         var logger = Substitute.For<ILogger<SitecoreTokenService>>();
-        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest));
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("sensitive-error-body")
+        });
         var svc = CreateService(cache, handler, logger);
 
         // Act
@@ -82,7 +85,13 @@ public class SitecoreTokenServiceLoggingTests
         logger.Received().Log(
             LogLevel.Warning,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Authentication request failed")),
+            Arg.Is<object>(o => o.ToString()!.Contains("Authentication request failed") && !o.ToString()!.Contains("sensitive-error-body")),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
+        logger.DidNotReceive().Log(
+            Arg.Any<LogLevel>(),
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("sensitive-error-body")),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
     }
@@ -109,7 +118,69 @@ public class SitecoreTokenServiceLoggingTests
         logger.Received().Log(
             LogLevel.Error,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("Failed to parse authentication response")),
+            Arg.Is<object>(o => o.ToString()!.Contains("Failed to parse authentication response") && !o.ToString()!.Contains("invalid json")),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
+        logger.DidNotReceive().Log(
+            Arg.Any<LogLevel>(),
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("invalid json")),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_EmptyAccessToken_DoesNotLogRawBody()
+    {
+        // Arrange
+        var creds = new SitecoreAuthClientCredentials("id", "secret");
+        var cache = Substitute.For<ISitecoreTokenCache>();
+        cache.GetToken(creds).Returns((SitecoreAuthToken?)null);
+        var logger = Substitute.For<ILogger<SitecoreTokenService>>();
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"access_token\":\"\",\"expires_in\":3600,\"secret_hint\":\"sensitive-raw-payload\"}")
+        });
+        var svc = CreateService(cache, handler, logger);
+
+        // Act & Assert
+        await Should.ThrowAsync<SitecoreAuthResponseException>(() => svc.GetSitecoreAuthToken(creds));
+        logger.DidNotReceive().Log(
+            Arg.Any<LogLevel>(),
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("sensitive-raw-payload")),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_UrlWithEmbeddedCredentials_LogsWarningWithoutLeakingCredentials()
+    {
+        // Arrange
+        var creds = new SitecoreAuthClientCredentials("id", "secret");
+        var cache = Substitute.For<ISitecoreTokenCache>();
+        cache.GetToken(creds).Returns((SitecoreAuthToken?)null);
+        var logger = Substitute.For<ILogger<SitecoreTokenService>>();
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        using var httpClient = new HttpClient(handler);
+        var options = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = "https://admin:super-secret-pass@auth.test/token"
+        });
+        var svc = new SitecoreTokenService(httpClient, cache, options, logger);
+
+        // Act & Assert
+        await Should.ThrowAsync<SitecoreAuthException>(() => svc.GetSitecoreAuthToken(creds));
+        logger.Received().Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("Invalid or insecure AuthTokenUrl")),
+            Arg.Any<Exception?>(),
+            Arg.Any<Func<object, Exception?, string>>());
+        logger.DidNotReceive().Log(
+            Arg.Any<LogLevel>(),
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => o.ToString()!.Contains("super-secret-pass") || o.ToString()!.Contains("Requesting new token")),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
     }
