@@ -10,52 +10,58 @@ This library provides a robust, production-ready solution for OAuth2 authenticat
 ### Solution Architecture
 
 ```
-Sitecore.API.Foundation/
-    Sitecore.API.Foundation.Authorization/           # Main library
-        Abstractions/                                 # Interfaces and contracts
-            ISitecoreTokenService.cs
-            ISitecoreTokenCache.cs
-        Configuration/                                # Configuration and constants
-            SitecoreTokenServiceOptions.cs
-            Constants.cs
-        DependencyInjection/                          # Service registration extensions
-            ServiceCollectionExtensions.cs
-        Exceptions/                                   # Custom exception hierarchy
-            SitecoreAuthException.cs
-        Models/                                       # Data models and DTOs
-            SitecoreAuthToken.cs
-            SitecoreAuthClientCredentials.cs
-        Services/                                     # Service implementations
-            SitecoreTokenService.cs
-            SitecoreTokenCache.cs
-    Sitecore.API.Foundation.Tests/                  # Unit tests
-    Sitecore.API.Foundation.Authorization.IntegrationTests/  # Integration tests
-        Fixtures/                                     # Test fixtures and infrastructure
-            KeycloakTestFixture.cs                      # Real Keycloak container management
-            MockOAuth2TestFixture.cs                    # Mock OAuth2 server
-            MockOAuth2MessageHandler.cs                 # HTTP message handler
-        Tests/                                        # Test implementations
-            InfrastructureTests.cs                      # Basic infrastructure validation
-            MockIntegrationTests.cs                     # Mock-based integration tests
-            TokenServiceIntegrationTests.cs             # Real Keycloak integration tests
-        Collections/                                  # Test collection definitions
-        Realm/                                        # Keycloak realm configuration
-            test-realm.json
+Sitecore.API.Foundation.Authorization/
+    Sitecore.API.Foundation.Authorization.slnx
+    src/
+        Sitecore.API.Foundation.Authorization/           # Main library (net8.0;net9.0;net10.0)
+            Abstractions/                                 # Interfaces and contracts
+                ISitecoreTokenService.cs
+                ISitecoreTokenCache.cs
+            Configuration/                                # Configuration and constants
+                SitecoreTokenServiceOptions.cs
+                Constants.cs
+            DependencyInjection/                          # Service registration & HTTP resilience extensions
+                ServiceCollectionExtensions.cs
+            Exceptions/                                   # Custom exception hierarchy
+                SitecoreAuthException.cs
+            Models/                                       # Data models with secret/token ToString() masking
+                SitecoreAuthToken.cs
+                SitecoreAuthClientCredentials.cs
+            Services/                                     # Service implementations
+                SitecoreTokenService.cs
+                SitecoreTokenCache.cs
+    tests/
+        Sitecore.API.Foundation.Tests/                    # Unit & CI workflow contract tests
+        Sitecore.API.Foundation.Authorization.IntegrationTests/  # Integration tests
+            Fixtures/                                     # Test fixtures and infrastructure
+                KeycloakTestFixture.cs                    # Real Keycloak container management
+                MockOAuth2TestFixture.cs                  # Mock OAuth2 server
+                MockOAuth2MessageHandler.cs               # HTTP message handler
+            Tests/                                        # Test implementations
+                InfrastructureTests.cs                    # Basic infrastructure validation
+                LoggingIntegrationTests.cs                # Structured logging integration validation
+                MockIntegrationTests.cs                   # Mock-based integration tests
+                TokenServiceIntegrationTests.cs           # Real Keycloak integration tests
+            Collections/                                  # Test collection definitions
+            Realm/                                        # Keycloak realm configuration
+                test-realm.json
+        Sitecore.API.Foundation.Authorization.Benchmarks/ # BenchmarkDotNet cache microbenchmarks
+            Program.cs
+            TokenCacheBenchmarks.cs
 ```
 
 ## Features
 
 ### Core Features
-- **Thread-safe token caching** using `ConcurrentDictionary`
-- **Automatic token refresh** and expiration handling
-- **Configurable cache management** with size limits and cleanup intervals
-- **Configurable authentication endpoint** for testing and custom environments
-- **Dependency injection integration** with multiple registration patterns
-- **High-performance concurrent operations** with non-blocking cleanup
+- **Multi-targeted for .NET 8, 9, and 10** (`net8.0;net9.0;net10.0`)
+- **Thread-safe token caching** using `ConcurrentDictionary` with atomic `KeyValuePair` removal
+- **Automatic token refresh** and expiration handling with `CancellationToken` support
+- **Standard HTTP resilience** via `Microsoft.Extensions.Http.Resilience` (`HttpStandardResilienceOptions`)
+- **Configurable cache management** with bounded `PriorityQueue` earliest-expiration eviction and periodic cleanup
+- **Endpoint & secret hardening**: HTTPS (or loopback HTTP) `AuthTokenUrl` validation, `ToString()` masking (`***`) for `ClientSecret` and `AccessToken`, and zero raw OAuth body logging
+- **Dependency injection integration** with `Scoped` and `Singleton` registration patterns
 - **Configuration-based setup** with `appsettings.json` support
 - **Comprehensive exception handling** with custom exception types
-- **Modern .NET practices** with nullable reference types and proper disposal
-- **Organized architecture** following domain-driven design principles
 
 ### Testing Features
 - **Comprehensive test suite** with integration tests
@@ -235,6 +241,28 @@ services.AddSitecoreAuthenticationSingleton(options =>
 });
 ```
 
+### 5. HTTP Resilience & Custom `HttpClient` Registration
+
+```csharp
+services.AddSitecoreAuthentication(
+    configureOptions: options =>
+    {
+        options.MaxCacheSize = 50;
+    },
+    configureResilience: resilience =>
+    {
+        resilience.Retry.MaxRetryAttempts = 3;
+        resilience.Retry.Delay = TimeSpan.FromMilliseconds(200);
+    },
+    configureClient: clientBuilder =>
+    {
+        clientBuilder.ConfigureHttpClient(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+    });
+```
+
 ## Configuration Options
 
 | Property | Type | Default | Description |
@@ -242,7 +270,7 @@ services.AddSitecoreAuthenticationSingleton(options =>
 | `MaxCacheSize` | `int` | `10` | Maximum number of tokens to cache before eviction |
 | `CleanupThreshold` | `int` | `15` | Number of tokens that triggers automatic cleanup |
 | `CleanupInterval` | `TimeSpan` | `5 minutes` | Interval between automatic cleanups |
-| `AuthTokenUrl` | `string` | `"https://auth.sitecorecloud.io/oauth/token"` | The authentication endpoint URL |
+| `AuthTokenUrl` | `string` | `"https://auth.sitecorecloud.io/oauth/token"` | The authentication endpoint URL (must be an absolute `https://` URI or loopback `http://` URI without embedded credentials) |
 
 ### Configuration Examples
 
@@ -349,11 +377,11 @@ public class SitecoreService
         _tokenService = tokenService;
     }
     
-    public async Task<string> GetAccessTokenAsync()
+    public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken = default)
     {
         var credentials = new SitecoreAuthClientCredentials("your-client-id", "your-client-secret");
         
-        var token = await _tokenService.GetSitecoreAuthToken(credentials);
+        var token = await _tokenService.GetSitecoreAuthToken(credentials, cancellationToken);
         return token.AccessToken;
     }
 }
@@ -728,10 +756,13 @@ The library uses `ConcurrentDictionary` for optimal concurrent performance:
 
 ### Memory Management
 
-- Automatic cleanup of expired tokens based on `CleanupInterval`
-- Size-based eviction using LRU (Least Recently Used) strategy
+- Zero-allocation periodic cleanup of expired tokens based on `CleanupInterval`
+- Bounded max-heap `PriorityQueue` eviction (`O(N log K)`) removing earliest-expiring tokens when exceeding `MaxCacheSize`
+- Atomic `KeyValuePair` cache removals (`ConcurrentDictionary.TryRemove(kvp)`) preventing concurrent refresh race conditions
 - Configurable cache size limits to prevent memory bloat
-- Proper disposal of resources through `IDisposable` pattern
+- Proper disposal of synchronization primitives through `IDisposable`
+
+For measured `.NET 8`, `.NET 9`, and `.NET 10` BenchmarkDotNet results, see the [Benchmarks](../README.md#benchmarks) section in the root README.
 
 ### Recommended Settings
 
@@ -779,16 +810,16 @@ catch (SitecoreAuthResponseException ex)
 
 ## Thread Safety
 
-## Integration Test Documentation
-
-For details on running and troubleshooting integration tests, see the [Integration Test Documentation](../README.md#docker-integration-setup) in the main project README.
-
 The library is fully thread-safe:
 
 - **Token Service**: Thread-safe operations for concurrent token requests
-- **Token Cache**: Uses `ConcurrentDictionary` for optimal concurrent access
-- **Cleanup Operations**: Non-blocking cleanup that doesn't interfere with reads
+- **Token Cache**: Uses `ConcurrentDictionary` with atomic `KeyValuePair` removals for optimal concurrent access
+- **Cleanup Operations**: Non-blocking opportunistic cleanup that doesn't interfere with reads
 - **Configuration**: Immutable after initialization
+
+## Integration Test Documentation
+
+For details on running and troubleshooting integration tests, see the [Integration Test Documentation](../tests/Sitecore.API.Foundation.Authorization.IntegrationTests/README.md).
 
 ## Troubleshooting
 
