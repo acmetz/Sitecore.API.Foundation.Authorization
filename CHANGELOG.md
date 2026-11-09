@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-11-09
+### Summary
+- Official 1.0.0 production release featuring .NET 8/9/10 multi-targeting, `Microsoft.Extensions.Http.Resilience` integration, `CancellationToken` overloads, security hardening, high-performance `PriorityQueue` cache eviction, and comprehensive BenchmarkDotNet performance test suites.
+
+### Added
+- Multi-targeting support for `.NET 8.0`, `.NET 9.0`, and `.NET 10.0`.
+- Native resilience pipeline integration via `Microsoft.Extensions.Http.Resilience` with lifetime-preserving `AddSitecoreAuthorizationService` dependency injection extensions.
+- Cancellation token overloads on `ISitecoreTokenService` (`GetSitecoreAuthToken`, `TryRefreshSitecoreAuthToken`) with `ConfigureAwait(false)` for non-blocking asynchronous execution.
+- Performance benchmark suite (`TokenCacheBenchmarks`) using `BenchmarkDotNet` across all target frameworks.
+- Automated CI/CD release pipeline using NuGet OIDC Trusted Publishing and automated GitHub Release generation.
+
+### Security
+- Sensitive token masking in `SitecoreAuthToken.ToString()` to prevent inadvertent credential leakage in logs.
+- Validation of `AuthTokenUrl` enforcing HTTPS or loopback HTTP schemes and rejecting URIs containing embedded user information (`UserInfo`).
+- Validation of token response `ExpiresIn` ensuring positive expiration intervals.
+
+### Performance & Reliability
+- PriorityQueue-based size-bounded eviction (`O(N log K)`) in `SitecoreTokenCache` reducing allocation and CPU overhead during cache saturation.
+- Atomic `TryRemove(KeyValuePair)` in token cleanup to guarantee thread-safe removal counts under concurrent access.
+- Central Package Management with transitive package pinning enabled across all solution projects.
+
+---
+
 ## [0.9.2] - 2025-08-16
 ### Summary
 - Structure Updates
