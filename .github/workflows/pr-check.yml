@@ -21,8 +21,14 @@ jobs:
 
       - name: Run actionlint
         run: |
-          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          ./actionlint -color
+          if command -v actionlint >/dev/null 2>&1; then
+            actionlint -color
+          else
+            TMP_DIR="$(mktemp -d)"
+            trap 'rm -rf "$TMP_DIR"' EXIT
+            bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest "$TMP_DIR"
+            "$TMP_DIR/actionlint" -color
+          fi
 
   build-test:
     name: Build and Test (No Docker)
@@ -43,16 +49,16 @@ jobs:
 
       # Restore dependencies
       - name: Restore dependencies
-        run: dotnet restore -p:TreatWarningsAsErrors=false
+        run: dotnet restore
 
       # Build in Release mode (net8.0, net9.0, net10.0)
       - name: Build
-        run: dotnet build --configuration Release --no-restore -p:TreatWarningsAsErrors=false
+        run: dotnet build --configuration Release --no-restore
 
       # Run tests with coverage (skip Docker-related tests)
       - name: Test with coverage (skip Docker integration)
         run: |
-          dotnet test --configuration Release --no-build -p:TreatWarningsAsErrors=false \
+          dotnet test --configuration Release --no-build \
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --filter "FullyQualifiedName!~TokenServiceIntegrationTests"

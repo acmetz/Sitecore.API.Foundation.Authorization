@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Shouldly;
@@ -16,8 +17,12 @@ public class ServiceCollectionExtensionsOverrideTests
     private sealed class CustomTokenService : ISitecoreTokenService
     {
         public Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials)
+            => GetSitecoreAuthToken(credentials, CancellationToken.None);
+        public Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials, CancellationToken cancellationToken)
             => Task.FromResult(new SitecoreAuthToken("custom", DateTimeOffset.UtcNow.AddMinutes(5)));
         public Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token)
+            => TryRefreshSitecoreAuthToken(token, CancellationToken.None);
+        public Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token, CancellationToken cancellationToken)
             => Task.FromResult(new SitecoreAuthToken("custom2", DateTimeOffset.UtcNow.AddMinutes(5)));
     }
 

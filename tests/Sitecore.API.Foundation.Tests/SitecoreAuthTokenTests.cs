@@ -250,4 +250,20 @@ public class SitecoreAuthTokenTests
         dictionary[token2].ShouldBe("value2"); // Same as token1
         dictionary[token3].ShouldBe("value3");
     }
+
+    [Fact]
+    public void ToString_ShouldMaskAccessToken()
+    {
+        // Arrange
+        var accessToken = "super-secret-bearer-token";
+        var expiration = DateTimeOffset.UtcNow.AddHours(1);
+        var token = new SitecoreAuthToken(accessToken, expiration);
+
+        // Act
+        var formatted = token.ToString();
+
+        // Assert
+        formatted.ShouldBe($"SitecoreAuthToken {{ AccessToken = ***, Expiration = {expiration} }}");
+        formatted.ShouldNotContain(accessToken);
+    }
 }

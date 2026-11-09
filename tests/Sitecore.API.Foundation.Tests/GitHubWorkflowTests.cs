@@ -26,13 +26,13 @@ public class GitHubWorkflowTests
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Sitecore.API.Foundation.Authorization.sln")))
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Sitecore.API.Foundation.Authorization.slnx")))
         {
             directory = directory.Parent;
         }
 
         return directory?.FullName
-            ?? throw new InvalidOperationException("Could not locate repository root containing Sitecore.API.Foundation.Authorization.sln.");
+            ?? throw new InvalidOperationException("Could not locate repository root containing Sitecore.API.Foundation.Authorization.slnx.");
     }
 
     [Fact]
@@ -185,5 +185,15 @@ public class GitHubWorkflowTests
         // Filtering only for "~UnitTests" silently skips all unit tests in Sitecore.API.Foundation.Tests.dll.
         nugetWorkflow.ShouldContain("--filter \"FullyQualifiedName!~TokenServiceIntegrationTests\"");
         prCheckWorkflow.ShouldContain("--filter \"FullyQualifiedName!~TokenServiceIntegrationTests\"");
+    }
+
+    [Fact]
+    public void Workflows_ShouldNotDisableTreatWarningsAsErrors()
+    {
+        var nugetWorkflow = File.ReadAllText(NugetReleaseWorkflowPath);
+        var prCheckWorkflow = File.ReadAllText(PrCheckWorkflowPath);
+
+        nugetWorkflow.ShouldNotContain("TreatWarningsAsErrors=false", Case.Insensitive);
+        prCheckWorkflow.ShouldNotContain("TreatWarningsAsErrors=false", Case.Insensitive);
     }
 }

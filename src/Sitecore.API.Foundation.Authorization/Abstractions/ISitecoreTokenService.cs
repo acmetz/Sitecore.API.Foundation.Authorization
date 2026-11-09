@@ -1,4 +1,4 @@
-using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Sitecore.API.Foundation.Authorization.Models;
 
@@ -15,6 +15,14 @@ public interface ISitecoreTokenService
     /// <param name="credentials">The client credentials to authenticate with.</param>
     /// <returns>A task that represents the asynchronous operation containing the authentication token.</returns>
     Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials);
+
+    /// <summary>
+    /// Gets a Sitecore authentication token for the specified credentials.
+    /// </summary>
+    /// <param name="credentials">The client credentials to authenticate with.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation.</param>
+    /// <returns>A task that represents the asynchronous operation containing the authentication token.</returns>
+    Task<SitecoreAuthToken> GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials, CancellationToken cancellationToken);
     
     /// <summary>
     /// Refreshes an existing Sitecore authentication token.
@@ -22,4 +30,12 @@ public interface ISitecoreTokenService
     /// <param name="token">The token to refresh.</param>
     /// <returns>A task that represents the asynchronous operation containing the refreshed token.</returns>
     Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token);
+
+    /// <summary>
+    /// Refreshes an existing Sitecore authentication token.
+    /// </summary>
+    /// <param name="token">The token to refresh.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation.</param>
+    /// <returns>A task that represents the asynchronous operation containing the refreshed token.</returns>
+    Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token, CancellationToken cancellationToken);
 }

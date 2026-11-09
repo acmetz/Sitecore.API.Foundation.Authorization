@@ -122,6 +122,23 @@ public class SitecoreTokenCacheTests : IDisposable
     }
 
     [Fact]
+    public void RemoveToken_WhenCredentialsUpdatedToNewToken_ShouldNotRemoveNewToken()
+    {
+        // Arrange
+        var oldToken = new SitecoreAuthToken("old-token", DateTimeOffset.UtcNow.AddHours(1));
+        var newToken = new SitecoreAuthToken("new-token", DateTimeOffset.UtcNow.AddHours(2));
+        _cache.SetToken(_testCredentials, oldToken);
+        _cache.SetToken(_testCredentials, newToken);
+
+        // Act
+        var removedCredentials = _cache.RemoveToken(oldToken);
+
+        // Assert
+        removedCredentials.ShouldBeNull();
+        _cache.GetToken(_testCredentials).ShouldBe(newToken);
+    }
+
+    [Fact]
     public void ClearCache_ShouldRemoveAllTokens()
     {
         // Arrange

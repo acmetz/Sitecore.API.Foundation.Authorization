@@ -27,5 +27,5 @@ public class SitecoreTokenServiceOptions
     /// Defaults to the production Sitecore Cloud endpoint.
     /// Can be overridden for testing purposes.
     /// </summary>
-    public string AuthTokenUrl { get; set; } = "https://auth.sitecorecloud.io/oauth/token";
+    public string AuthTokenUrl { get; set; } = Constants.SitecoreCloudAuthTokenUrl;
 }
