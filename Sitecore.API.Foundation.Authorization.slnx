@@ -6,6 +6,8 @@
   </Configurations>
   <Folder Name="/docs/">
     <File Path="docs/README.md" />
+    <File Path="docs/designs/README.md" />
+    <File Path="docs/designs/consolidated-modernization-and-security-hardening.md" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".actrc" />

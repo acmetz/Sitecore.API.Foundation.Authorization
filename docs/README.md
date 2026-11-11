@@ -12,6 +12,9 @@ This library provides a robust, production-ready solution for OAuth2 authenticat
 ```
 Sitecore.API.Foundation.Authorization/
     Sitecore.API.Foundation.Authorization.slnx
+    docs/                                         # Project and design documentation
+        README.md                                 # Technical architecture & integration documentation
+        designs/                                  # Technical design specifications (EGM model)
     src/
         Sitecore.API.Foundation.Authorization/           # Main library (net8.0;net9.0;net10.0)
             Abstractions/                                 # Interfaces and contracts

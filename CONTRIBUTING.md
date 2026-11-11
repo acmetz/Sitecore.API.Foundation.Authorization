@@ -22,6 +22,7 @@ We welcome contributions to the Sitecore.API.Foundation.Authorization project! T
 4. **Update documentation** as needed
 5. **Ensure all tests pass** before submitting
 6. **Create a clear PR description** explaining the changes
+7. **Design Specifications (EGM)**: For new features or architectural changes, provide or update a technical design specification in `docs/designs/` conforming to the [Elephant-Goldfish Model (EGM)](docs/designs/README.md).
 
 ## Development Setup
 
