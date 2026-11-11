@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Multi-targeting support for `.NET 8.0`, `.NET 9.0`, and `.NET 10.0`.
-- Native resilience pipeline integration via `Microsoft.Extensions.Http.Resilience` with lifetime-preserving `AddSitecoreAuthorizationService` dependency injection extensions.
+- Native resilience pipeline integration via `Microsoft.Extensions.Http.Resilience` with lifetime-preserving `AddSitecoreAuthentication` and `AddSitecoreAuthenticationSingleton` dependency injection extensions.
 - Cancellation token overloads on `ISitecoreTokenService` (`GetSitecoreAuthToken`, `TryRefreshSitecoreAuthToken`) with `ConfigureAwait(false)` for non-blocking asynchronous execution.
 - Performance benchmark suite (`TokenCacheBenchmarks`) using `BenchmarkDotNet` across all target frameworks.
 - Automated CI/CD release pipeline using NuGet OIDC Trusted Publishing and automated GitHub Release generation.

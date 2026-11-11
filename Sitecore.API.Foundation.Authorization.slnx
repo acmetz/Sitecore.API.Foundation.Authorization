@@ -6,6 +6,8 @@
   </Configurations>
   <Folder Name="/docs/">
     <File Path="docs/README.md" />
+    <File Path="docs/designs/README.md" />
+    <File Path="docs/designs/consolidated-modernization-and-security-hardening.md" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".actrc" />
@@ -22,6 +24,7 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/src/">
+    <File Path="src/README.md" />
     <Project Path="src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj" />
   </Folder>
   <Folder Name="/tests/">

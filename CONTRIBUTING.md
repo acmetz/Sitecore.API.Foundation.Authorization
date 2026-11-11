@@ -22,6 +22,7 @@ We welcome contributions to the Sitecore.API.Foundation.Authorization project! T
 4. **Update documentation** as needed
 5. **Ensure all tests pass** before submitting
 6. **Create a clear PR description** explaining the changes
+7. **Design Specifications & Contracts (EGM)**: For new features or architectural changes, provide or update a technical design specification in `docs/designs/` conforming to the [Elephant-Goldfish Model (EGM)](docs/designs/README.md), and keep affected module contracts in [`src/`](src/README.md) in sync.
 
 ## Development Setup
 
@@ -55,12 +56,14 @@ dotnet test
 Sitecore.API.Foundation.Authorization/
 Sitecore.API.Foundation.Authorization.slnx
 src/
-   Sitecore.API.Foundation.Authorization/                 # Main library (net8.0;net9.0;net10.0)
+   README.md                                              # EGM system blueprint & global invariants
+   Sitecore.API.Foundation.Authorization/                 # Main library (net8.0;net9.0;net10.0) & module contracts
 tests/
    Sitecore.API.Foundation.Tests/                         # Unit tests
    Sitecore.API.Foundation.Authorization.IntegrationTests/  # Mock & Keycloak integration tests
    Sitecore.API.Foundation.Authorization.Benchmarks/      # BenchmarkDotNet performance suite
 docs/                                                     # Extended developer documentation
+   designs/                                               # EGM technical design specifications
 .github/                                                  # GitHub Actions CI/CD workflows
 README.md
 ```
@@ -182,6 +185,9 @@ Releases are published via CI/CD after PRs are merged.
 ### Documentation
 
 - [README.md](README.md) - Project overview and usage
+- [docs/README.md](docs/README.md) - Extended developer and configuration guide
+- [src/README.md](src/README.md) - System architecture blueprint and module contracts (EGM)
+- [docs/designs/README.md](docs/designs/README.md) - Technical design specifications (EGM)
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Development and contribution guidelines (this file)
 - Source code with XML documentation comments
 

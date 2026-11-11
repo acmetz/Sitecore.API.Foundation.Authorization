@@ -122,7 +122,9 @@ dotnet test --filter "FullyQualifiedName!~TokenServiceIntegrationTests"
 
 ## Documentation
 
-For advanced configuration, `CancellationToken` usage, `Microsoft.Extensions.Http.Resilience` policies, multi-tenant patterns, and Docker Keycloak test setup, see the [Extended Developer & Configuration Guide](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/blob/main/docs/README.md).
+- [Extended Developer & Configuration Guide](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/blob/main/docs/README.md) — Advanced configuration, `CancellationToken` usage, `Microsoft.Extensions.Http.Resilience` policies, multi-tenant patterns, and Docker Keycloak test setup.
+- [System Architecture Blueprint (`src/README.md`)](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/blob/main/src/README.md) — EGM subsystem blueprint, global invariants, side effects, and module contracts.
+- [EGM Design Specifications (`docs/designs/README.md`)](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/blob/main/docs/designs/README.md) — Technical design specifications and Spec-Driven Development workflow.
 
 ## License
 
