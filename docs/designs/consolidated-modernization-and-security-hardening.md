@@ -1,7 +1,7 @@
 # Consolidated Modernization, Regression Recovery, and Security Hardening
 
 *   **Author:** Aaron Metz (`acmetz`)
-*   **Status:** Approved
+*   **Status:** Approved / Implemented (PR #33, v1.0.0)
 *   **Date:** 2026-11-09
 
 --------------------------------------------------------------------------------
@@ -194,8 +194,9 @@ flowchart TD
 
 ## Additional Resources
 
-*   Open and merged pull requests in [acmetz/Sitecore.API.Foundation.Authorization](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/pulls) (#16–#32)
-*   Unmerged branches `origin/feat/nuget-trusted-publishing` (`c711286`) and `origin/feature/asyn-updates-and-reliability` (`af270db`)
+*   Consolidated implementation pull request [PR #33](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/pull/33) and [`v1.0.0` release](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/releases/tag/v1.0.0)
+*   Prior pull requests in [acmetz/Sitecore.API.Foundation.Authorization](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/pulls) (#16–#32)
+*   Source branches consolidated into PR #33: `origin/feat/nuget-trusted-publishing` (`c711286`) and `origin/feature/asyn-updates-and-reliability` (`af270db`)
 
 ## Future Improvements
 
@@ -217,7 +218,7 @@ flowchart TD
 *   **Proposed Changes**: Delete `commit_msg.txt` from git tracking (`git rm commit_msg.txt`).
 *   **Rationale**: Accidentally committed to the repository root during PR #30 (`f986f15`) conflict resolution.
 
-#### 2. `tests/Sitecore.API.Foundation.Authorization.Benchmarks/Sitecore.API.Foundation.Authorization.Benchmarks.csproj`, `Program.cs`, & `TokenCacheBenchmarks.cs` (Create)
+#### 2. [`tests/Sitecore.API.Foundation.Authorization.Benchmarks/Sitecore.API.Foundation.Authorization.Benchmarks.csproj`](../../tests/Sitecore.API.Foundation.Authorization.Benchmarks/Sitecore.API.Foundation.Authorization.Benchmarks.csproj), [`Program.cs`](../../tests/Sitecore.API.Foundation.Authorization.Benchmarks/Program.cs), & [`TokenCacheBenchmarks.cs`](../../tests/Sitecore.API.Foundation.Authorization.Benchmarks/TokenCacheBenchmarks.cs) (Create)
 
 *   **Type / Scope**: Benchmark Suite Recovery (Restored from PR #16 `5658b10`)
 *   **Proposed Changes**: Restore the three benchmark files verbatim via `git checkout 5658b10 -- tests/Sitecore.API.Foundation.Authorization.Benchmarks/`.
@@ -226,7 +227,7 @@ flowchart TD
 #### 3. `Sitecore.API.Foundation.Authorization.sln` (Delete) & [`Sitecore.API.Foundation.Authorization.slnx`](../../Sitecore.API.Foundation.Authorization.slnx) (Create)
 
 *   **Type / Scope**: XML Solution File Migration
-*   **Proposed Changes**: Add `tests/Sitecore.API.Foundation.Authorization.Benchmarks/Sitecore.API.Foundation.Authorization.Benchmarks.csproj` under the `/tests/` solution folder, migrate via `dotnet sln migrate` to `Sitecore.API.Foundation.Authorization.slnx` with `<Folder Name="/src/">` containing `src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj` and `<Folder Name="/tests/">` containing `Sitecore.API.Foundation.Tests.csproj`, `Sitecore.API.Foundation.Authorization.IntegrationTests.csproj`, and `Sitecore.API.Foundation.Authorization.Benchmarks.csproj`, and delete `Sitecore.API.Foundation.Authorization.sln`.
+*   **Proposed Changes**: Add `tests/Sitecore.API.Foundation.Authorization.Benchmarks/Sitecore.API.Foundation.Authorization.Benchmarks.csproj` under the `/tests/` solution folder, migrate via `dotnet sln migrate` to `Sitecore.API.Foundation.Authorization.slnx` (organizing `/docs/`, `/Solution Items/`, `/src/` containing `src/Sitecore.API.Foundation.Authorization/Sitecore.API.Foundation.Authorization.csproj`, and `/tests/` containing `Sitecore.API.Foundation.Tests.csproj`, `Sitecore.API.Foundation.Authorization.IntegrationTests.csproj`, and `Sitecore.API.Foundation.Authorization.Benchmarks.csproj`), and delete `Sitecore.API.Foundation.Authorization.sln`.
 *   **Rationale**: Recovers the benchmark project entry deleted by PR #30 (`f986f15`) and migrates the solution file to the XML-based `.slnx` format supported by the .NET 10 SDK.
 
 #### 4. [`Directory.Packages.props`](../../Directory.Packages.props) (Modify)
@@ -311,7 +312,7 @@ flowchart TD
 *   **Type / Scope**: Token Acquisition Service
 *   **Proposed Changes**:
     *   Preserve `protected readonly HttpClient HttpClient;` and the 4-parameter constructor `(HttpClient httpClient, ISitecoreTokenCache tokenCache, IOptions<SitecoreTokenServiceOptions> options, ILogger<SitecoreTokenService>? logger = null)`.
-    *   Rename `AuthResponse` properties (`Models/AuthResponse.cs` or nested record) to `AccessToken` and `ExpiresIn` with `[JsonPropertyName("access_token")]` and `[JsonPropertyName("expires_in")]` attributes (PR #19).
+    *   Rename `AuthResponse` (`private sealed class AuthResponse` nested inside `SitecoreTokenService`) properties to `AccessToken` and `ExpiresIn` with `[JsonPropertyName("access_token")]` and `[JsonPropertyName("expires_in")]` attributes (PR #19).
     *   Remove `SafeReadBodyAsync` and remove `{Body}` and `{Raw}` response payload logging from warning/error logs (PR #29).
     *   Implement the 1-parameter methods by delegating to the 2-parameter (`CancellationToken`) overloads with `CancellationToken.None`.
     *   In the 2-parameter `GetSitecoreAuthToken(SitecoreAuthClientCredentials credentials, CancellationToken cancellationToken)` and `TryRefreshSitecoreAuthToken(SitecoreAuthToken token, CancellationToken cancellationToken)`: if `cancellationToken.IsCancellationRequested` is true, throw `new TaskCanceledException(null, null, cancellationToken)`; pass `cancellationToken` to `HttpClient.PostAsJsonAsync` and `response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: cancellationToken)`, filter the JSON parse `catch` block with `catch (Exception ex) when (ex is not OperationCanceledException)`, and append `.ConfigureAwait(false)` to all awaited calls.
@@ -348,13 +349,13 @@ flowchart TD
 *   **Proposed Changes**: Update internal `CustomTokenService` to implement both 1-parameter and 2-parameter (`CancellationToken`) overloads of `ISitecoreTokenService`.
 *   **Rationale**: Keeps the custom service override test compiling against the expanded `ISitecoreTokenService` interface.
 
-#### 18. `tests/Sitecore.API.Foundation.Tests/SitecoreAuthExceptionTests.cs` (Create)
+#### 18. [`tests/Sitecore.API.Foundation.Tests/SitecoreAuthExceptionTests.cs`](../../tests/Sitecore.API.Foundation.Tests/SitecoreAuthExceptionTests.cs) (Create)
 
 *   **Type / Scope**: Unit Tests (Restored from PR #27 `667cbfb`)
 *   **Proposed Changes**: Restore verbatim via `git checkout 667cbfb -- tests/Sitecore.API.Foundation.Tests/SitecoreAuthExceptionTests.cs`.
 *   **Rationale**: Recovers constructor unit tests for `SitecoreAuthException`, `SitecoreAuthHttpException`, and `SitecoreAuthResponseException` deleted in `f986f15`.
 
-#### 19. `tests/Sitecore.API.Foundation.Tests/Models/SitecoreAuthClientCredentialsTests.cs` (Create)
+#### 19. [`tests/Sitecore.API.Foundation.Tests/Models/SitecoreAuthClientCredentialsTests.cs`](../../tests/Sitecore.API.Foundation.Tests/Models/SitecoreAuthClientCredentialsTests.cs) (Create)
 
 *   **Type / Scope**: Unit Tests (Restored from PR #22 `559e80a` & Merged with PR #18)
 *   **Proposed Changes**: Create `SitecoreAuthClientCredentialsTests` (namespace `Sitecore.API.Foundation.Tests.Models`) testing valid construction, `ArgumentNullException` for null/empty `ClientId` and `ClientSecret` (PR #18), value equality, and `ToString()` masking `ClientSecret = ***` without containing the raw secret (PR #22).
@@ -366,7 +367,7 @@ flowchart TD
 *   **Proposed Changes**: Add `ToString_ShouldMaskAccessToken` verifying `token.ToString()` equals `$"SitecoreAuthToken {{ AccessToken = ***, Expiration = {expiration} }}"` and does not contain the raw `AccessToken`.
 *   **Rationale**: Verifies the `SitecoreAuthToken.ToString()` security fix.
 
-#### 21. `tests/Sitecore.API.Foundation.Tests/ResilienceTests.cs` (Create)
+#### 21. [`tests/Sitecore.API.Foundation.Tests/ResilienceTests.cs`](../../tests/Sitecore.API.Foundation.Tests/ResilienceTests.cs) (Create)
 
 *   **Type / Scope**: Unit Tests (Adapted from `origin/feature/asyn-updates-and-reliability` `af270db`)
 *   **Proposed Changes**: Add xUnit tests in namespace `Sitecore.API.Foundation.Tests` verifying: (1) `AddSitecoreAuthentication` with `configureResilience` retries transient `HttpStatusCode.ServiceUnavailable` (`503`) responses and succeeds on subsequent `200 OK`; (2) `AddSitecoreAuthenticationSingleton` with `configureResilience` preserves `ServiceLifetime.Singleton` and retries transient failures; (3) `configureClient` customizes the named `HttpClient` (`Constants.SitecoreHttpClientName`); and (4) `httpClientFactory` overrides `HttpClient` creation.

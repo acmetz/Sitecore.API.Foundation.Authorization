@@ -3,7 +3,7 @@
 ## Overview
 
 Default implementations of the `ISitecoreTokenService` and
-`ISitecoreTokenCache` contracts from `../Abstractions/`.
+`ISitecoreTokenCache` contracts from [`../Abstractions/README.md`](../Abstractions/README.md).
 `SitecoreTokenService` returns a cached token when one is valid; otherwise it
 POSTs an OAuth2 `client_credentials` request to the configured `AuthTokenUrl`,
 validates the response, and caches the result. `SitecoreTokenCache` is an
@@ -70,6 +70,8 @@ opportunistic expired-token cleanup and size-bounded eviction.
 
 ### `SitecoreTokenCache`
 
+- Constructor throws `ArgumentNullException` when `options` or `options.Value`
+  is `null`; `logger` is optional `[SitecoreTokenCache.cs:SitecoreTokenCache]`.
 - Storage is `ConcurrentDictionary<SitecoreAuthClientCredentials, SitecoreAuthToken>`;
   one token per credentials pair `[SitecoreTokenCache.cs:_tokens]`.
 - `GetToken` returns `null` for a missing or expired entry and does not remove
@@ -80,10 +82,15 @@ opportunistic expired-token cleanup and size-bounded eviction.
   - `UtcNow - LastCleanup > CleanupInterval`
   - one of the first `min(5, Count)` enumerated entries is expired
     `[SitecoreTokenCache.cs:HasExpiredTokens]`
-- Opportunistic cleanup waits at most 10 ms for the write lock and is skipped
-  if it cannot acquire it `[SitecoreTokenCache.cs:TryPerformCleanup]`.
-  `PerformCleanup()` blocks until it acquires the lock
-  `[SitecoreTokenCache.cs:PerformCleanup]`.
+- Opportunistic cleanup (`TryPerformCleanup`) waits at most 10 ms for
+  `_cleanupLock`, is skipped if it cannot acquire the lock, and re-evaluates
+  `ShouldPerformCleanup()` under the lock (double-checked locking) before
+  calling `ExecuteCleanupUnsafe()` `[SitecoreTokenCache.cs:TryPerformCleanup]`.
+- `PerformCleanup()` blocks until it acquires `_cleanupLock` and calls
+  `ExecuteCleanupUnsafe()` directly (which removes expired tokens and updates
+  `LastCleanup = DateTimeOffset.UtcNow` even when `removed == 0`, but does not
+  run size-limit eviction) `[SitecoreTokenCache.cs:PerformCleanup]`,
+  `[SitecoreTokenCache.cs:ExecuteCleanupUnsafe]`.
 - Removal uses `TryRemove(KeyValuePair)`, so a token replaced concurrently by
   `SetToken` is never deleted by cleanup, eviction, or `RemoveToken`; removal
   counts reflect only successful removals

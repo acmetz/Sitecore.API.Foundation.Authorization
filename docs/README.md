@@ -16,8 +16,10 @@ Sitecore.API.Foundation.Authorization/
         README.md                                 # Technical architecture & integration documentation
         designs/                                  # Technical design specifications (EGM model)
     src/
-        Sitecore.API.Foundation.Authorization/           # Main library (net8.0;net9.0;net10.0)
-            Abstractions/                                 # Interfaces and contracts
+        README.md                                 # EGM system blueprint & global invariants
+        Sitecore.API.Foundation.Authorization/    # Main library (net8.0;net9.0;net10.0)
+            README.md                             # Project module index & dependency graph
+            Abstractions/                         # Interfaces and contracts (+ README.md contract)
                 ISitecoreTokenService.cs
                 ISitecoreTokenCache.cs
             Configuration/                                # Configuration and constants
@@ -163,25 +165,28 @@ services.AddSitecoreAuthentication(options =>
 
 ## Architecture Overview
 
-The library follows a clean architecture approach with clear separation of concerns:
+The library follows a clean architecture approach with clear separation of concerns, documented through [Elephant-Goldfish Model (EGM) Design Specifications](designs/README.md), the [System Blueprint (`src/README.md`)](../src/README.md), and the [Library Module Index (`src/Sitecore.API.Foundation.Authorization/README.md`)](../src/Sitecore.API.Foundation.Authorization/README.md):
 
-### Core Abstractions
+### Core Abstractions ([Contract](../src/Sitecore.API.Foundation.Authorization/Abstractions/README.md))
 - **`ISitecoreTokenService`** - Main interface for token operations
 - **`ISitecoreTokenCache`** - Interface for cache management
 
-### Models
+### Models ([Contract](../src/Sitecore.API.Foundation.Authorization/Models/README.md))
 - **`SitecoreAuthToken`** - Immutable token representation with expiration
 - **`SitecoreAuthClientCredentials`** - Immutable credentials record
 
-### Services
+### Services ([Contract](../src/Sitecore.API.Foundation.Authorization/Services/README.md))
 - **`SitecoreTokenService`** - Main service implementation
 - **`SitecoreTokenCache`** - High-performance concurrent cache
 
-### Configuration
+### Configuration ([Contract](../src/Sitecore.API.Foundation.Authorization/Configuration/README.md))
 - **`SitecoreTokenServiceOptions`** - Configuration options pattern
 - **`Constants`** - Internal configuration constants
 
-### Exceptions
+### Dependency Injection ([Contract](../src/Sitecore.API.Foundation.Authorization/DependencyInjection/README.md))
+- **`ServiceCollectionExtensions`** - `AddSitecoreAuthentication` and `AddSitecoreAuthenticationSingleton` registration and HTTP resilience extensions
+
+### Exceptions ([Contract](../src/Sitecore.API.Foundation.Authorization/Exceptions/README.md))
 - **`SitecoreAuthException`** - Base exception type
 - **`SitecoreAuthHttpException`** - HTTP-specific errors
 - **`SitecoreAuthResponseException`** - Response parsing errors

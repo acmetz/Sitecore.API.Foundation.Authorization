@@ -11,7 +11,7 @@ codebase using `/egm:egm-drift-report`.
 
 | Document | Author | Status | Description |
 | :------- | :----- | :----- | :---------- |
-| [consolidated-modernization-and-security-hardening.md](consolidated-modernization-and-security-hardening.md) | Aaron Metz (`@acmetz`) | Approved / Merged (v1.0.0) | Complete design specification consolidating regression recovery, .NET 8/9/10 multi-targeting, `CancellationToken` support, `Microsoft.Extensions.Http.Resilience`, atomic `PriorityQueue` cache eviction, URI security validation, and bearer/secret masking. |
+| [consolidated-modernization-and-security-hardening.md](consolidated-modernization-and-security-hardening.md) | Aaron Metz (`@acmetz`) | Approved / Implemented (PR #33, v1.0.0) | Complete design specification consolidating regression recovery, .NET 8/9/10 multi-targeting, `CancellationToken` support, `Microsoft.Extensions.Http.Resilience`, atomic `PriorityQueue` cache eviction, URI security validation, and bearer/secret masking. |
 
 ## EGM Workflow
 

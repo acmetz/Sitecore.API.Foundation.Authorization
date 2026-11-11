@@ -2,7 +2,7 @@
 
 ## Overview
 
-Exception hierarchy thrown by `SitecoreTokenService` in `../Services/`.
+Exception hierarchy thrown by `SitecoreTokenService` in [`../Services/README.md`](../Services/README.md).
 Callers can catch `SitecoreAuthException` to handle every library-specific
 authentication failure, or catch a subclass for HTTP or response-parsing
 failures.

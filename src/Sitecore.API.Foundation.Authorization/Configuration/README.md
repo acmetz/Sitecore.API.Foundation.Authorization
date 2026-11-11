@@ -5,7 +5,7 @@
 Runtime options for the token service and cache, plus internal constants for
 the Sitecore Cloud OAuth2 `client_credentials` request. Options are bound
 through `IOptions<SitecoreTokenServiceOptions>` by the registration methods in
-`../DependencyInjection/`.
+[`../DependencyInjection/README.md`](../DependencyInjection/README.md).
 
 ## Interface
 
@@ -27,7 +27,7 @@ through `IOptions<SitecoreTokenServiceOptions>` by the registration methods in
 ## Invariants
 
 - `Constants` is `internal`. Only this assembly and the assemblies listed in
-  `InternalsVisibleTo` in `../Sitecore.API.Foundation.Authorization.csproj`
+  `InternalsVisibleTo` in [`../Sitecore.API.Foundation.Authorization.csproj`](../Sitecore.API.Foundation.Authorization.csproj)
   (`Sitecore.API.Foundation.Tests`,
   `Sitecore.API.Foundation.Authorization.IntegrationTests`) can read it
   `[Constants.cs:Constants]`.

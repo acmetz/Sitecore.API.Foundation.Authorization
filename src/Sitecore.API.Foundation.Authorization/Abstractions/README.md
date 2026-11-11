@@ -3,9 +3,9 @@
 ## Overview
 
 Public contracts for the library. Consumers depend on these interfaces; the
-default implementations live in `../Services/`. Both interfaces use the value
+default implementations live in [`../Services/README.md`](../Services/README.md). Both interfaces use the value
 types `SitecoreAuthClientCredentials` and `SitecoreAuthToken` from
-`../Models/`.
+[`../Models/README.md`](../Models/README.md).
 
 ## Interface
 
@@ -20,7 +20,7 @@ types `SitecoreAuthClientCredentials` and `SitecoreAuthToken` from
   - `void SetToken(SitecoreAuthClientCredentials credentials, SitecoreAuthToken token)`
   - `SitecoreAuthClientCredentials? RemoveToken(SitecoreAuthToken token)` — returns the credentials that owned the token, or `null`
   - `void ClearCache()`
-  - `void PerformCleanup()` — removes expired tokens and enforces size limits (per doc comment)
+  - `void PerformCleanup()` — removes expired tokens (the interface XML doc also mentions enforcing size limits, which `SitecoreTokenCache` enforces on `SetToken`)
 
 ## Invariants
 
