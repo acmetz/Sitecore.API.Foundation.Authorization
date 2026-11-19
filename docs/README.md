@@ -17,28 +17,30 @@ Sitecore.API.Foundation.Authorization/
         designs/                                  # Technical design specifications (EGM model)
     src/
         README.md                                 # EGM system blueprint & global invariants
-        Sitecore.API.Foundation.Authorization/    # Main library (net8.0;net9.0;net10.0)
+        Sitecore.API.Foundation.Authorization/    # Main library (net10.0;net11.0)
             README.md                             # Project module index & dependency graph
-            Abstractions/                         # Interfaces and contracts (+ README.md contract)
+            Abstractions/                                 # Interfaces and contracts (+ README.md contract)
                 ISitecoreTokenService.cs
                 ISitecoreTokenCache.cs
-            Configuration/                                # Configuration and constants
+            Configuration/                                # Configuration and constants (+ README.md contract)
                 SitecoreTokenServiceOptions.cs
                 Constants.cs
-            DependencyInjection/                          # Service registration & HTTP resilience extensions
+            DependencyInjection/                          # Service registration & HTTP resilience extensions (+ README.md contract)
+                ISitecoreAuthenticationBuilder.cs
                 ServiceCollectionExtensions.cs
-            Exceptions/                                   # Custom exception hierarchy
+            Exceptions/                                   # Custom exception hierarchy (+ README.md contract)
                 SitecoreAuthException.cs
-            Models/                                       # Data models with secret/token ToString() masking
+            Models/                                       # Data models with secret/token ToString() masking (+ README.md contract)
                 SitecoreAuthToken.cs
                 SitecoreAuthClientCredentials.cs
-            Services/                                     # Service implementations
+            Services/                                     # Service implementations (+ README.md contract)
                 SitecoreTokenService.cs
                 SitecoreTokenCache.cs
     tests/
         Sitecore.API.Foundation.Tests/                    # Unit & CI workflow contract tests
         Sitecore.API.Foundation.Authorization.IntegrationTests/  # Integration tests
             Fixtures/                                     # Test fixtures and infrastructure
+                InMemoryLogger.cs                         # In-memory ILogger capture helper
                 KeycloakTestFixture.cs                    # Real Keycloak container management
                 MockOAuth2TestFixture.cs                  # Mock OAuth2 server
                 MockOAuth2MessageHandler.cs               # HTTP message handler
@@ -58,8 +60,9 @@ Sitecore.API.Foundation.Authorization/
 ## Features
 
 ### Core Features
-- **Multi-targeted for .NET 8, 9, and 10** (`net8.0;net9.0;net10.0`)
-- **Thread-safe token caching** using `ConcurrentDictionary` with atomic `KeyValuePair` removal
+- **Multi-targeted for .NET 10 and 11** (`net10.0;net11.0`)
+- **Typed multi-client authentication** (`AddSitecoreAuthentication<TClient>()` and `ISitecoreTokenService<TClient>`) with fluent `ISitecoreAuthenticationBuilder<TClient>` configuration and zero collision with `AddHttpClient<TClient>()`
+- **Thread-safe token caching** using `ConcurrentDictionary` partitioned by `(Credentials, AuthTokenUrl)` with atomic `KeyValuePair` removal
 - **Automatic token refresh** and expiration handling with `CancellationToken` support
 - **Standard HTTP resilience** via `Microsoft.Extensions.Http.Resilience` (`HttpStandardResilienceOptions`)
 - **Configurable cache management** with bounded `PriorityQueue` earliest-expiration eviction and periodic cleanup
@@ -108,7 +111,9 @@ dotnet add package SitecoreAPIAuthorization
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
-using Sitecore.API.Foundation.Authorization;
+using Sitecore.API.Foundation.Authorization.Abstractions;
+using Sitecore.API.Foundation.Authorization.DependencyInjection;
+using Sitecore.API.Foundation.Authorization.Models;
 
 // Configure services
 services.AddSitecoreAuthentication();
@@ -169,22 +174,24 @@ The library follows a clean architecture approach with clear separation of conce
 
 ### Core Abstractions ([Contract](../src/Sitecore.API.Foundation.Authorization/Abstractions/README.md))
 - **`ISitecoreTokenService`** - Main interface for token operations
-- **`ISitecoreTokenCache`** - Interface for cache management
+- **`ISitecoreTokenService<TClient>`** - Typed interface for consumer-specific token operations
+- **`ISitecoreTokenCache`** - Interface for endpoint-partitioned cache management
 
 ### Models ([Contract](../src/Sitecore.API.Foundation.Authorization/Models/README.md))
 - **`SitecoreAuthToken`** - Immutable token representation with expiration
 - **`SitecoreAuthClientCredentials`** - Immutable credentials record
 
 ### Services ([Contract](../src/Sitecore.API.Foundation.Authorization/Services/README.md))
-- **`SitecoreTokenService`** - Main service implementation
-- **`SitecoreTokenCache`** - High-performance concurrent cache
+- **`SitecoreTokenService` / `SitecoreTokenService<TClient>`** - Default and typed service implementations
+- **`SitecoreTokenCache`** - High-performance concurrent cache partitioned by `(Credentials, AuthTokenUrl)`
 
 ### Configuration ([Contract](../src/Sitecore.API.Foundation.Authorization/Configuration/README.md))
 - **`SitecoreTokenServiceOptions`** - Configuration options pattern
 - **`Constants`** - Internal configuration constants
 
 ### Dependency Injection ([Contract](../src/Sitecore.API.Foundation.Authorization/DependencyInjection/README.md))
-- **`ServiceCollectionExtensions`** - `AddSitecoreAuthentication` and `AddSitecoreAuthenticationSingleton` registration and HTTP resilience extensions
+- **`ServiceCollectionExtensions`** - Untyped and typed (`<TClient>`) `AddSitecoreAuthentication` and `AddSitecoreAuthenticationSingleton` registration and HTTP resilience extensions
+- **`ISitecoreAuthenticationBuilder<TClient>`** - Fluent builder for configuring per-type options, resilience, and `HttpClient` behavior
 
 ### Exceptions ([Contract](../src/Sitecore.API.Foundation.Authorization/Exceptions/README.md))
 - **`SitecoreAuthException`** - Base exception type
@@ -270,6 +277,56 @@ services.AddSitecoreAuthentication(
         });
     });
 ```
+
+### 6. Typed Multi-Client Registration (`AddSitecoreAuthentication<TClient>()`)
+
+When an application integrates with multiple Sitecore environments or APIs simultaneously (e.g., Staging and Production, or XM Cloud Authoring and Delivery), register `ISitecoreTokenService<TClient>` alongside `services.AddHttpClient<TClient>()`:
+
+```csharp
+// Configure global shared cache capacity on the default options (optional)
+services.Configure<SitecoreTokenServiceOptions>(options =>
+{
+    options.MaxCacheSize = 100;
+    options.CleanupThreshold = 150;
+});
+
+// Register your typed API client and its dedicated Sitecore authentication pipeline
+services.AddHttpClient<XmCloudStagingClient>(client =>
+{
+    client.BaseAddress = new Uri("https://xmcloud-staging.sitecorecloud.io/");
+});
+
+services.AddSitecoreAuthentication<XmCloudStagingClient>()
+    .ConfigureOptions(options =>
+    {
+        options.AuthTokenUrl = "https://staging-auth.sitecorecloud.io/oauth/token";
+    })
+    .ConfigureResilience(resilience =>
+    {
+        resilience.Retry.MaxRetryAttempts = 3;
+    })
+    .ConfigureHttpClient(builder =>
+    {
+        builder.ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(15));
+    });
+
+// Inject both HttpClient and ISitecoreTokenService<TClient> without DI collisions
+public class XmCloudStagingClient
+{
+    private readonly HttpClient _httpClient;
+    private readonly ISitecoreTokenService<XmCloudStagingClient> _tokenService;
+
+    public XmCloudStagingClient(
+        HttpClient httpClient,
+        ISitecoreTokenService<XmCloudStagingClient> tokenService)
+    {
+        _httpClient = httpClient;
+        _tokenService = tokenService;
+    }
+}
+```
+
+> **Note on Shared Cache Options**: All untyped and typed token services share a single `ISitecoreTokenCache` singleton partitioned by `(ClientId, ClientSecret, AuthTokenUrl)`. Global cache capacity and cleanup settings (`MaxCacheSize`, `CleanupThreshold`, and `CleanupInterval`) are read from the default unnamed `IOptions<SitecoreTokenServiceOptions>` registration (`services.Configure<SitecoreTokenServiceOptions>(...)` or non-generic `AddSitecoreAuthentication(...)`), whereas per-client named options configure `AuthTokenUrl` for that `TClient`.
 
 ## Configuration Options
 
@@ -597,43 +654,47 @@ The library includes a comprehensive integration testing framework with multiple
 ### Test Architecture Overview
 
 ```
-Integration Tests (19 total)
-Infrastructure Tests (4/4 passing)
+Integration Tests (24 total: 15 non-Docker + 9 Docker Keycloak, 1 skipped)
+Infrastructure Tests (4)
     Basic test framework validation
     Environment verification
     File system access tests
     Async test patterns
-Mock Integration Tests (9/9 passing)
+Mock Integration Tests (9)
     Mock OAuth2 server health checks
     Full SitecoreTokenService authentication workflow
     Token caching and reuse validation
     Token refresh functionality
     Concurrent request handling
     Error handling for invalid credentials
-    Cache cleanup and eviction testing
+    Different credentials isolation
     Full OAuth2 workflow demonstration
-    HTTP request efficiency verification
-Docker Integration Tests (3/5 passing)
+    Cache cleanup and eviction testing
+Logging Integration Tests (2)
+    Service & cache structured log levels and secret/token non-leakage
+    Invalid response JSON error logging
+Docker Integration Tests (9 total, 1 explicitly skipped)
     Real Keycloak container management
-    OAuth2 discovery endpoint testing
-    Format compatibility analysis
-    Docker availability verification
+    OAuth2 discovery and token workflow testing
+    Cached token reuse, refresh, and expiration handling
+    Concurrent requests and client credentials error handling
+    Docker / Colima availability verification
 ```
 
 ### Running Tests
 
 ```bash
-# Run all working integration tests (recommended)
-dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests --filter "MockIntegrationTests OR InfrastructureTests"
+# Run all non-Docker integration tests (recommended)
+dotnet test tests/Sitecore.API.Foundation.Authorization.IntegrationTests --filter "MockIntegrationTests|InfrastructureTests|LoggingIntegrationTests"
 
 # Run only mock OAuth2 integration tests (fastest)
-dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests --filter "MockIntegrationTests"
+dotnet test tests/Sitecore.API.Foundation.Authorization.IntegrationTests --filter "MockIntegrationTests"
 
 # Run infrastructure tests only
-dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests --filter "InfrastructureTests"
+dotnet test tests/Sitecore.API.Foundation.Authorization.IntegrationTests --filter "InfrastructureTests"
 
-# Run all tests including Docker tests (may require Docker configuration)
-dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests
+# Run all integration tests including Docker Keycloak tests
+dotnet test tests/Sitecore.API.Foundation.Authorization.IntegrationTests
 
 # Run all tests in solution
 dotnet test
@@ -650,24 +711,24 @@ For full Docker integration testing with real Keycloak:
 #### Quick Setup
 ```bash
 # 1. Switch Docker to Linux containers
-# Right-click Docker Desktop tray icon ? "Switch to Linux containers..."
+# Right-click Docker Desktop tray icon -> "Switch to Linux containers..."
 
 # 2. Pull Keycloak image
 docker pull quay.io/keycloak/keycloak:24.0.1
 
 # 3. Run integration tests
-dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests
+dotnet test tests/Sitecore.API.Foundation.Authorization.IntegrationTests
 ```
 
 #### Expected Results After Docker Setup
-- **19/19 tests passing** (100% success rate)
+- **15/15 non-Docker integration tests** passing, plus Docker `TokenServiceIntegrationTests` (**8/9 active** passing when Docker is configured, **1 explicitly skipped**)
 - **Real Keycloak integration** working
 - **Full OAuth2 workflow validation**
 
 ### Unit Testing with Custom Auth URL
 
 ```csharp
-[Test]
+[Fact]
 public async Task TestSitecoreAuthentication_WithCustomAuthUrl()
 {
     // Arrange
@@ -678,15 +739,15 @@ public async Task TestSitecoreAuthentication_WithCustomAuthUrl()
         options.MaxCacheSize = 5;
     });
     
-    var serviceProvider = services.BuildServiceProvider();
+    using var serviceProvider = services.BuildServiceProvider();
     var tokenService = serviceProvider.GetRequiredService<ISitecoreTokenService>();
     
     var credentials = new SitecoreAuthClientCredentials("test-client", "test-secret");
     
     // Act & Assert
     var token = await tokenService.GetSitecoreAuthToken(credentials);
-    Assert.IsNotNull(token);
-    Assert.IsFalse(token.IsExpired);
+    token.AccessToken.ShouldNotBeNullOrEmpty();
+    token.IsExpired.ShouldBeFalse();
 }
 ```
 
@@ -730,24 +791,24 @@ public class SitecoreAuthIntegrationTests : IClassFixture<TestServerFixture>
 ### Mocking for Unit Tests
 
 ```csharp
-[Test]
+[Fact]
 public async Task TestServiceWithMockedTokenService()
 {
     // Arrange
-    var mockService = new Mock<ISitecoreTokenService>();
+    var mockService = Substitute.For<ISitecoreTokenService>();
     var expectedToken = new SitecoreAuthToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
     
-    mockService.Setup(s => s.GetSitecoreAuthToken(It.IsAny<SitecoreAuthClientCredentials>()))
-              .ReturnsAsync(expectedToken);
+    mockService.GetSitecoreAuthToken(Arg.Any<SitecoreAuthClientCredentials>())
+               .Returns(expectedToken);
     
-    var service = new MyService(mockService.Object);
+    var service = new MyService(mockService);
     
     // Act
     var result = await service.GetTokenAsync();
     
     // Assert
-    Assert.AreEqual(expectedToken, result);
-    mockService.Verify(s => s.GetSitecoreAuthToken(It.IsAny<SitecoreAuthClientCredentials>()), Times.Once);
+    result.ShouldBe(expectedToken);
+    await mockService.Received(1).GetSitecoreAuthToken(Arg.Any<SitecoreAuthClientCredentials>());
 }
 ```
 
@@ -759,18 +820,18 @@ The library uses `ConcurrentDictionary` for optimal concurrent performance:
 
 
 - **Read operations** are lock-free and highly concurrent
-- **Write operations** use minimal locking with `AddOrUpdate`
-- **Cleanup operations** use `ReaderWriterLockSlim` with try-lock patterns to avoid blocking reads
+- **Write operations** use minimal locking via direct concurrent dictionary indexing (`_tokens[key] = token`)
+- **Cleanup operations** use `System.Threading.Lock` with try-lock patterns to avoid blocking reads
 
 ### Memory Management
 
 - Zero-allocation periodic cleanup of expired tokens based on `CleanupInterval`
-- Bounded max-heap `PriorityQueue` eviction (`O(N log K)`) removing earliest-expiring tokens when exceeding `MaxCacheSize`
+- Bounded max-heap `PriorityQueue` eviction (`O(N log K)`) removing earliest-expiring tokens when exceeding `MaxCacheSize` using a static `DescendingLongComparer`
 - Atomic `KeyValuePair` cache removals (`ConcurrentDictionary.TryRemove(kvp)`) preventing concurrent refresh race conditions
 - Configurable cache size limits to prevent memory bloat
-- Proper disposal of synchronization primitives through `IDisposable`
+- Lightweight `System.Threading.Lock` requiring no native handle disposal (`IDisposable` is preserved on `ISitecoreTokenCache` for backward compatibility and custom cache implementations)
 
-For measured `.NET 8`, `.NET 9`, and `.NET 10` BenchmarkDotNet results, see the [Benchmarks](../README.md#benchmarks) section in the root README.
+For measured `.NET 10` and `.NET 11` (plus historical `.NET 8` and `.NET 9`) BenchmarkDotNet results, see the [Benchmarks](../README.md#benchmarks) section in the root README.
 
 ### Recommended Settings
 
@@ -842,11 +903,11 @@ For details on running and troubleshooting integration tests, see the [Integrati
 services.AddSitecoreAuthentication(); // Add this line
 ```
 
-#### 2. "The provided token is not managed by this service"
+#### 2. "The provided token is not managed by this service."
 
-**Cause:** Trying to refresh a token that wasn't created by the current service instance.
+**Cause:** Trying to refresh a token that wasn't created by the current service instance, was already evicted or cleared from the cache, or belongs to a different configured `AuthTokenUrl` (for example, calling `TryRefreshSitecoreAuthToken` on an `ISitecoreTokenService<TClient>` bound to a different endpoint).
 
-**Solution:** Only refresh tokens that were obtained from the same service instance.
+**Solution:** Only refresh tokens that were obtained from the same service instance (and endpoint) while still present in the cache.
 
 #### 3. HTTP errors with custom auth URL
 
@@ -874,7 +935,7 @@ options.AuthTokenUrl = "http://localhost:8080/mock-auth/token";
 # 2. Select "Switch to Linux containers..."
 # 3. Wait for Docker to restart
 # 4. Verify: docker info | findstr "OSType" should show "linux"
-# 5. Re-run tests: dotnet test Sitecore.API.Foundation.Authorization.IntegrationTests
+# 5. Re-run tests: dotnet test tests/Sitecore.API.Foundation.Authorization.IntegrationTests
 ```
 
 #### 5. High memory usage

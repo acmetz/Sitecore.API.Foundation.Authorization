@@ -39,3 +39,11 @@ public interface ISitecoreTokenService
     /// <returns>A task that represents the asynchronous operation containing the refreshed token.</returns>
     Task<SitecoreAuthToken> TryRefreshSitecoreAuthToken(SitecoreAuthToken token, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Typed interface for managing Sitecore authentication token service operations for a specific consumer type <typeparamref name="TClient"/>.
+/// </summary>
+/// <typeparam name="TClient">The consumer type whose named <see cref="System.Net.Http.HttpClient"/> and options are used.</typeparam>
+public interface ISitecoreTokenService<TClient> : ISitecoreTokenService where TClient : class
+{
+}

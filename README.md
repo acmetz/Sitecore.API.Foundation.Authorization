@@ -2,7 +2,7 @@
 
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/acmetz/Sitecore.API.Foundation.Authorization/pr-check.yml?label=CI)](https://github.com/acmetz/Sitecore.API.Foundation.Authorization/actions)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-![.NET](https://img.shields.io/badge/.NET-8%20%7C%209%20%7C%2010-blue)
+![.NET](https://img.shields.io/badge/.NET-10%20%7C%2011-blue)
 [![NuGet](https://img.shields.io/nuget/v/SitecoreAPIAuthorization.svg)](https://www.nuget.org/packages/SitecoreAPIAuthorization)
 
 A high-performance, thread-safe .NET library for managing Sitecore Cloud authentication tokens with automatic caching, cleanup, and comprehensive integration testing.
@@ -35,10 +35,43 @@ public class MyService
 }
 ```
 
+### Typed Multi-Client Registration (`AddSitecoreAuthentication<TClient>()`)
+
+Register per-client `AuthTokenUrl` endpoints and resilience pipelines alongside `AddHttpClient<TClient>()` without DI collisions, while sharing a single endpoint-partitioned `ISitecoreTokenCache` singleton:
+
+```csharp
+services.AddHttpClient<MyXmCloudClient>(client =>
+{
+    client.BaseAddress = new Uri("https://xmcloud-api.sitecorecloud.io/");
+});
+
+services.AddSitecoreAuthentication<MyXmCloudClient>()
+    .ConfigureOptions(options =>
+    {
+        options.AuthTokenUrl = "https://staging-auth.sitecorecloud.io/oauth/token";
+    })
+    .ConfigureResilience();
+
+public class MyXmCloudClient
+{
+    private readonly HttpClient _httpClient;
+    private readonly ISitecoreTokenService<MyXmCloudClient> _tokenService;
+
+    public MyXmCloudClient(
+        HttpClient httpClient,
+        ISitecoreTokenService<MyXmCloudClient> tokenService)
+    {
+        _httpClient = httpClient;
+        _tokenService = tokenService;
+    }
+}
+```
+
 ## Key Features
 
-- Multi-targeted for `.NET 8`, `.NET 9`, and `.NET 10`
-- Thread-safe token caching (`ConcurrentDictionary` + bounded `PriorityQueue` eviction + atomic `KeyValuePair` removal)
+- Multi-targeted for `.NET 10` (LTS) and `.NET 11` (STS)
+- Typed multi-client registration (`AddSitecoreAuthentication<TClient>()` / `ISitecoreTokenService<TClient>`) with fluent `ISitecoreAuthenticationBuilder<TClient>` configuration
+- Thread-safe token caching (`ConcurrentDictionary` partitioned by `(Credentials, AuthTokenUrl)` + bounded `PriorityQueue` eviction + atomic `KeyValuePair` removal)
 - Automatic token refresh, expiration handling, and `CancellationToken` support
 - Built-in HTTP resilience configuration via `Microsoft.Extensions.Http.Resilience`
 - Secret and bearer token masking in `ToString()` with zero raw OAuth body logging
@@ -49,6 +82,37 @@ public class MyService
 ## Benchmarks
 
 Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) against `SitecoreTokenCache` populated with 64 active entries (`MaxCacheSize = 64` for steady-state eviction):
+
+```text
+BenchmarkDotNet v0.16.0-preview.2, macOS 27.2.1 (26B131) [Darwin 27.2.0]
+Apple M1 Max, 1 CPU, 10 logical and 10 physical cores
+.NET SDKs 10.0.403 / 11.0.100
+  .NET 10.0 : .NET 10.0.14 (10.0.14, 10.0.1426.52326), Arm64 RyuJIT armv8.0-a
+  .NET 11.0 : .NET 11.0.0 (11.0.0, 11.0.26.53018), Arm64 RyuJIT armv8.0-a
+```
+
+| Method | Runtime | Mean | Error | StdDev | Gen0 | Allocated |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
+| `GetToken` (Cache Hit) | .NET 10.0 | 68.35 ns | 0.277 ns | 0.245 ns | - | 0 B |
+| `GetToken` (Cache Hit) | .NET 11.0 | 70.13 ns | 0.351 ns | 0.311 ns | - | 0 B |
+| `SetToken` (Update Existing) | .NET 10.0 | 326.76 ns | 1.176 ns | 1.100 ns | 0.0124 | 80 B |
+| `SetToken` (Update Existing) | .NET 11.0 | 371.01 ns | 1.040 ns | 0.868 ns | 0.0124 | 80 B |
+| `RemoveToken` (Set + Atomic Remove) | .NET 10.0 | 574.64 ns | 2.800 ns | 2.482 ns | 0.0124 | 80 B |
+| `RemoveToken` (Set + Atomic Remove) | .NET 11.0 | 588.70 ns | 2.050 ns | 1.817 ns | 0.0124 | 80 B |
+| `PerformCleanup` (64 Entries) | .NET 10.0 | 1,577.54 ns | 3.945 ns | 3.497 ns | - | 0 B |
+| `PerformCleanup` (64 Entries) | .NET 11.0 | 1,400.06 ns | 5.608 ns | 4.972 ns | - | 0 B |
+| `SetToken` (`MaxCacheSize` Eviction) | .NET 10.0 | 1,780.94 ns | 6.538 ns | 6.116 ns | 0.0324 | 208 B |
+| `SetToken` (`MaxCacheSize` Eviction) | .NET 11.0 | 2,014.69 ns | 6.871 ns | 6.091 ns | 0.0305 | 208 B |
+
+Run the benchmark suite locally:
+
+```bash
+dotnet run --configuration Release --framework net11.0 --project tests/Sitecore.API.Foundation.Authorization.Benchmarks
+```
+
+### Historical Benchmarks (.NET 8 & .NET 9)
+
+Preserved `v1.0.0` baseline measurements across `.NET 8.0`, `.NET 9.0`, and `.NET 10.0` (single-key `SitecoreAuthClientCredentials` cache prior to composite `(Credentials, AuthTokenUrl)` endpoint partitioning):
 
 ```text
 BenchmarkDotNet v0.15.8, macOS 27.0.1 (26A434) [Darwin 27.0.0]
@@ -77,27 +141,25 @@ Apple M1 Max, 1 CPU, 10 logical and 10 physical cores
 | `SetToken` (`MaxCacheSize` Eviction) | .NET 9.0 | 4,853.63 ns | 22.772 ns | 20.187 ns | 0.0610 | 408 B |
 | `SetToken` (`MaxCacheSize` Eviction) | .NET 10.0 | 2,091.84 ns | 14.582 ns | 13.640 ns | 0.0381 | 256 B |
 
-Run the benchmark suite locally:
-
-```bash
-dotnet run --configuration Release --framework net10.0 --project tests/Sitecore.API.Foundation.Authorization.Benchmarks
-```
-
 ## Logging
 
 The library emits detailed logs that help diagnose authentication and caching behavior.
 
 Service logs:
+- Invalid or insecure AuthTokenUrl configured: {AuthUrl} (for clientId {ClientId}).
 - Token cache hit for clientId {ClientId}.
 - Requesting new token for clientId {ClientId} from {AuthUrl}.
 - Auth request payload and response status.
 - Authentication request failed with status {StatusCode} for {AuthUrl}.
 - Failed to parse authentication response for clientId {ClientId}.
 - Authentication response was empty or missing access_token for clientId {ClientId}.
+- Auth response contained non-positive expires_in ({ExpiresIn}) for clientId {ClientId}.
 - Token acquired and cached until {Expiration} for clientId {ClientId}.
+- Attempted to refresh a token not managed by the service.
 
 Cache logs:
 - Cache miss for clientId {ClientId}.
+- Token expired for clientId {ClientId}.
 - Cache hit for clientId {ClientId}.
 - Token cached for clientId {ClientId} until {Expiration}.
 - Evicted {Count} token(s) due to cache size limit.

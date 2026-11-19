@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Shouldly;
-using Sitecore.API.Foundation.Authorization;
 using Sitecore.API.Foundation.Authorization.Models;
 
 namespace Sitecore.API.Foundation.Tests;
@@ -24,25 +23,16 @@ public class SitecoreAuthTokenTests
         token.IsExpired.ShouldBeFalse();
     }
 
-    [Fact]
-    public void Constructor_WithNullAccessToken_ShouldThrowArgumentNullException()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Constructor_WithNullOrEmptyAccessToken_ShouldThrowArgumentNullException(string? invalidAccessToken)
     {
         // Arrange
         var expiration = DateTimeOffset.UtcNow.AddHours(1);
 
         // Act & Assert
-        Should.Throw<ArgumentNullException>(() => new SitecoreAuthToken(null!, expiration))
-            .ParamName.ShouldBe("AccessToken");
-    }
-
-    [Fact]
-    public void Constructor_WithEmptyAccessToken_ShouldThrowArgumentNullException()
-    {
-        // Arrange
-        var expiration = DateTimeOffset.UtcNow.AddHours(1);
-
-        // Act & Assert
-        Should.Throw<ArgumentNullException>(() => new SitecoreAuthToken("", expiration))
+        Should.Throw<ArgumentNullException>(() => new SitecoreAuthToken(invalidAccessToken!, expiration))
             .ParamName.ShouldBe("AccessToken");
     }
 
@@ -67,142 +57,62 @@ public class SitecoreAuthTokenTests
     }
 
     [Fact]
-    public void Equals_WithSameTokens_ShouldReturnTrue()
+    public void IsExpired_WithNonUtcOffset_ShouldEvaluateAgainstUtcInstant()
     {
-        // Arrange
+        // A local timestamp 2 hours ahead of UTC.Now at +05:00 represents 3 hours in the past in UTC.
+        var wallClockFutureInUtcPast = new DateTimeOffset(DateTimeOffset.UtcNow.AddHours(2).DateTime, TimeSpan.FromHours(5));
+        // A timestamp 1 hour ahead of UTC converted to -05:00 is still 1 hour in the future in UTC.
+        var futureAtNegativeOffset = DateTimeOffset.UtcNow.AddHours(1).ToOffset(TimeSpan.FromHours(-5));
+
+        new SitecoreAuthToken("past-token", wallClockFutureInUtcPast).IsExpired.ShouldBeTrue();
+        new SitecoreAuthToken("future-token", futureAtNegativeOffset).IsExpired.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsExpired_WithBoundaryTimestamps_ShouldEvaluateWithoutOverflow()
+    {
+        new SitecoreAuthToken("min-token", DateTimeOffset.MinValue).IsExpired.ShouldBeTrue();
+        new SitecoreAuthToken("max-token", DateTimeOffset.MaxValue).IsExpired.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void DefaultValue_ShouldHaveNullTokenAndBeExpired()
+    {
+        SitecoreAuthToken token = default;
+
+        token.AccessToken.ShouldBeNull();
+        token.Expiration.ShouldBe(default);
+        token.IsExpired.ShouldBeTrue();
+        token.ToString().ShouldBe($"SitecoreAuthToken {{ AccessToken = ***, Expiration = {default(DateTimeOffset)} }}");
+    }
+
+    [Fact]
+    public void ValueEquality_WithMatchingAndDifferingValues_ShouldBehaveAsRecordStruct()
+    {
         var expiration = DateTimeOffset.UtcNow.AddHours(1);
         var token1 = new SitecoreAuthToken("test-token", expiration);
-        var token2 = new SitecoreAuthToken("test-token", expiration);
+        var sameToken = new SitecoreAuthToken("test-token", expiration);
+        var differentAccessToken = new SitecoreAuthToken("other-token", expiration);
+        var differentExpiration = new SitecoreAuthToken("test-token", expiration.AddHours(1));
 
-        // Act & Assert
-        token1.Equals(token2).ShouldBeTrue();
-        token1.Equals((object)token2).ShouldBeTrue();
-    }
+        token1.Equals(sameToken).ShouldBeTrue();
+        token1.Equals((object)sameToken).ShouldBeTrue();
+        (token1 == sameToken).ShouldBeTrue();
+        (token1 != sameToken).ShouldBeFalse();
+        token1.GetHashCode().ShouldBe(sameToken.GetHashCode());
 
-    [Fact]
-    public void Equals_WithDifferentTokens_ShouldReturnFalse()
-    {
-        // Arrange
-        var expiration = DateTimeOffset.UtcNow.AddHours(1);
-        var token1 = new SitecoreAuthToken("test-token-1", expiration);
-        var token2 = new SitecoreAuthToken("test-token-2", expiration);
+        token1.Equals(differentAccessToken).ShouldBeFalse();
+        (token1 != differentAccessToken).ShouldBeTrue();
+        token1.Equals(differentExpiration).ShouldBeFalse();
+        (token1 != differentExpiration).ShouldBeTrue();
+        token1.Equals((object?)null).ShouldBeFalse();
+        token1.Equals("not a token").ShouldBeFalse();
 
-        // Act & Assert
-        token1.Equals(token2).ShouldBeFalse();
-        token1.Equals((object)token2).ShouldBeFalse();
-    }
-
-    [Fact]
-    public void Equals_WithDifferentExpirations_ShouldReturnFalse()
-    {
-        // Arrange
-        var token1 = new SitecoreAuthToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
-        var token2 = new SitecoreAuthToken("test-token", DateTimeOffset.UtcNow.AddHours(2));
-
-        // Act & Assert
-        token1.Equals(token2).ShouldBeFalse();
-    }
-
-    [Fact]
-    public void Equals_WithNull_ShouldReturnFalse()
-    {
-        // Arrange
-        var token = new SitecoreAuthToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
-
-        // Act & Assert
-        token.Equals(null).ShouldBeFalse();
-        token.Equals((object?)null).ShouldBeFalse();
-    }
-
-    [Fact]
-    public void Equals_WithSameReference_ShouldReturnTrue()
-    {
-        // Arrange
-        var token = new SitecoreAuthToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
-
-        // Act & Assert
-        token.Equals(token).ShouldBeTrue();
-        token.Equals((object)token).ShouldBeTrue();
-    }
-
-    [Fact]
-    public void Equals_WithDifferentType_ShouldReturnFalse()
-    {
-        // Arrange
-        var token = new SitecoreAuthToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
-        var otherObject = "not a token";
-
-        // Act & Assert
-        token.Equals(otherObject).ShouldBeFalse();
-    }
-
-    [Fact]
-    public void GetHashCode_WithSameTokens_ShouldReturnSameHashCode()
-    {
-        // Arrange
-        var expiration = DateTimeOffset.UtcNow.AddHours(1);
-        var token1 = new SitecoreAuthToken("test-token", expiration);
-        var token2 = new SitecoreAuthToken("test-token", expiration);
-
-        // Act & Assert
-        token1.GetHashCode().ShouldBe(token2.GetHashCode());
-    }
-
-    [Fact]
-    public void GetHashCode_WithDifferentTokens_ShouldReturnDifferentHashCodes()
-    {
-        // Arrange
-        var expiration = DateTimeOffset.UtcNow.AddHours(1);
-        var token1 = new SitecoreAuthToken("test-token-1", expiration);
-        var token2 = new SitecoreAuthToken("test-token-2", expiration);
-
-        // Act & Assert
-        token1.GetHashCode().ShouldNotBe(token2.GetHashCode());
-    }
-
-    [Fact]
-    public void OperatorEquals_WithSameTokens_ShouldReturnTrue()
-    {
-        // Arrange
-        var expiration = DateTimeOffset.UtcNow.AddHours(1);
-        var token1 = new SitecoreAuthToken("test-token", expiration);
-        var token2 = new SitecoreAuthToken("test-token", expiration);
-
-        // Act & Assert
-        (token1 == token2).ShouldBeTrue();
-        (token1 != token2).ShouldBeFalse();
-    }
-
-    [Fact]
-    public void OperatorEquals_WithDifferentTokens_ShouldReturnFalse()
-    {
-        // Arrange
-        var expiration = DateTimeOffset.UtcNow.AddHours(1);
-        var token1 = new SitecoreAuthToken("test-token-1", expiration);
-        var token2 = new SitecoreAuthToken("test-token-2", expiration);
-
-        // Act & Assert
-        (token1 == token2).ShouldBeFalse();
-        (token1 != token2).ShouldBeTrue();
-    }
-
-    [Fact]
-    public void OperatorEquals_WithNulls_ShouldHandleCorrectly()
-    {
-        // Arrange
-        SitecoreAuthToken? token1 = null;
-        SitecoreAuthToken? token2 = null;
-        var token3 = new SitecoreAuthToken("test-token", DateTimeOffset.UtcNow.AddHours(1));
-
-        // Act & Assert
-        (token1 == token2).ShouldBeTrue(); // Both null
-        (token1 != token2).ShouldBeFalse();
-        
-        (token1 == token3).ShouldBeFalse(); // One null
-        (token1 != token3).ShouldBeTrue();
-        
-        (token3 == token1).ShouldBeFalse(); // One null (reversed)
-        (token3 != token1).ShouldBeTrue();
+        SitecoreAuthToken? nullableA = null;
+        SitecoreAuthToken? nullableB = null;
+        (nullableA == nullableB).ShouldBeTrue();
+        (nullableA == token1).ShouldBeFalse();
+        (token1 != nullableA).ShouldBeTrue();
     }
 
     [Fact]
@@ -214,12 +124,8 @@ public class SitecoreAuthTokenTests
         var token2 = new SitecoreAuthToken("test-token", expiration); // Same as token1
         var token3 = new SitecoreAuthToken("different-token", expiration);
 
-        var hashSet = new HashSet<SitecoreAuthToken>();
-
         // Act
-        hashSet.Add(token1);
-        hashSet.Add(token2); // Should not add duplicate
-        hashSet.Add(token3);
+        HashSet<SitecoreAuthToken> hashSet = [token1, token2, token3];
 
         // Assert
         hashSet.Count.ShouldBe(2); // Only token1 and token3

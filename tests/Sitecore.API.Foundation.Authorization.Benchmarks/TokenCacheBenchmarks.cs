@@ -1,6 +1,5 @@
 using System;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Jobs;
 using Microsoft.Extensions.Options;
 using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.Models;
@@ -9,9 +8,6 @@ using Sitecore.API.Foundation.Authorization.Services;
 namespace Sitecore.API.Foundation.Authorization.Benchmarks;
 
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net80)]
-[SimpleJob(RuntimeMoniker.Net90)]
-[SimpleJob(RuntimeMoniker.Net10_0)]
 public class TokenCacheBenchmarks : IDisposable
 {
     private const int PopulatedCacheCount = 64;
@@ -26,7 +22,7 @@ public class TokenCacheBenchmarks : IDisposable
     private SitecoreAuthToken _primaryToken;
     private SitecoreAuthToken _updatedToken;
 
-    private SitecoreAuthClientCredentials[] _evictionRingCredentials = Array.Empty<SitecoreAuthClientCredentials>();
+    private SitecoreAuthClientCredentials[] _evictionRingCredentials = [];
     private DateTimeOffset _evictionBaseExpiration;
     private int _evictionIndex;
     private long _evictionTickOffset;
@@ -89,22 +85,13 @@ public class TokenCacheBenchmarks : IDisposable
     }
 
     [GlobalCleanup]
-    public void Cleanup()
-    {
-        Dispose();
-    }
+    public void Cleanup() => Dispose();
 
     [Benchmark(Description = "GetToken (Cache Hit)")]
-    public SitecoreAuthToken? GetToken_Hit()
-    {
-        return _populatedCache!.GetToken(_hitCredentials);
-    }
+    public SitecoreAuthToken? GetToken_Hit() => _populatedCache!.GetToken(_hitCredentials);
 
     [Benchmark(Description = "SetToken (Update Existing)")]
-    public void SetToken_Update()
-    {
-        _populatedCache!.SetToken(_hitCredentials, _updatedToken);
-    }
+    public void SetToken_Update() => _populatedCache!.SetToken(_hitCredentials, _updatedToken);
 
     [Benchmark(Description = "SetToken (MaxCacheSize Eviction)")]
     public void SetToken_EvictOldest()
@@ -124,10 +111,7 @@ public class TokenCacheBenchmarks : IDisposable
     }
 
     [Benchmark(Description = "PerformCleanup (64 Entries)")]
-    public void PerformCleanup()
-    {
-        _populatedCache!.PerformCleanup();
-    }
+    public void PerformCleanup() => _populatedCache!.PerformCleanup();
 
     public void Dispose()
     {

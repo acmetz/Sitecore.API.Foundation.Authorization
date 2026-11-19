@@ -1,7 +1,6 @@
 using System;
 using Shouldly;
 using Sitecore.API.Foundation.Authorization.Models;
-using Xunit;
 
 namespace Sitecore.API.Foundation.Tests.Models;
 
@@ -22,47 +21,29 @@ public class SitecoreAuthClientCredentialsTests
         credentials.ClientSecret.ShouldBe(clientSecret);
     }
 
-    [Fact]
-    public void Constructor_WithNullClientId_ShouldThrowArgumentNullException()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Constructor_WithNullOrEmptyClientId_ShouldThrowArgumentNullException(string? invalidClientId)
     {
         // Arrange
         var clientSecret = "test-client-secret";
 
         // Act & Assert
-        Should.Throw<ArgumentNullException>(() => new SitecoreAuthClientCredentials(null!, clientSecret))
+        Should.Throw<ArgumentNullException>(() => new SitecoreAuthClientCredentials(invalidClientId!, clientSecret))
             .ParamName.ShouldBe("ClientId");
     }
 
-    [Fact]
-    public void Constructor_WithEmptyClientId_ShouldThrowArgumentNullException()
-    {
-        // Arrange
-        var clientSecret = "test-client-secret";
-
-        // Act & Assert
-        Should.Throw<ArgumentNullException>(() => new SitecoreAuthClientCredentials("", clientSecret))
-            .ParamName.ShouldBe("ClientId");
-    }
-
-    [Fact]
-    public void Constructor_WithNullClientSecret_ShouldThrowArgumentNullException()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Constructor_WithNullOrEmptyClientSecret_ShouldThrowArgumentNullException(string? invalidClientSecret)
     {
         // Arrange
         var clientId = "test-client-id";
 
         // Act & Assert
-        Should.Throw<ArgumentNullException>(() => new SitecoreAuthClientCredentials(clientId, null!))
-            .ParamName.ShouldBe("ClientSecret");
-    }
-
-    [Fact]
-    public void Constructor_WithEmptyClientSecret_ShouldThrowArgumentNullException()
-    {
-        // Arrange
-        var clientId = "test-client-id";
-
-        // Act & Assert
-        Should.Throw<ArgumentNullException>(() => new SitecoreAuthClientCredentials(clientId, ""))
+        Should.Throw<ArgumentNullException>(() => new SitecoreAuthClientCredentials(clientId, invalidClientSecret!))
             .ParamName.ShouldBe("ClientSecret");
     }
 
@@ -80,6 +61,20 @@ public class SitecoreAuthClientCredentialsTests
         credentials1.GetHashCode().ShouldBe(credentials2.GetHashCode());
         credentials1.ShouldNotBe(credentials3);
         (credentials1 != credentials3).ShouldBeTrue();
+
+        var differentSecret = new SitecoreAuthClientCredentials("client-1", "secret-2");
+        credentials1.ShouldNotBe(differentSecret);
+        (credentials1 != differentSecret).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void DefaultValue_ShouldExposeNullPropertiesAndMaskToString()
+    {
+        SitecoreAuthClientCredentials credentials = default;
+
+        credentials.ClientId.ShouldBeNull();
+        credentials.ClientSecret.ShouldBeNull();
+        credentials.ToString().ShouldBe("SitecoreAuthClientCredentials { ClientId = , ClientSecret = *** }");
     }
 
     [Fact]

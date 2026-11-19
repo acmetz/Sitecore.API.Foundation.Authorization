@@ -16,13 +16,15 @@ through `IOptions<SitecoreTokenServiceOptions>` by the registration methods in
   | `MaxCacheSize` | `int` | `10` | `SitecoreTokenCache.SetToken` eviction trigger |
   | `CleanupThreshold` | `int` | `15` | `SitecoreTokenCache` opportunistic cleanup trigger |
   | `CleanupInterval` | `TimeSpan` | `TimeSpan.FromMinutes(5)` | `SitecoreTokenCache` opportunistic cleanup trigger |
-  | `AuthTokenUrl` | `string` | `Constants.SitecoreCloudAuthTokenUrl` | `SitecoreTokenService` POST target |
+  | `AuthTokenUrl` | `string` | `Constants.SitecoreCloudAuthTokenUrl` | `SitecoreTokenService` POST target and `SitecoreTokenCache` default partition URL |
 
 - `Constants` (`internal static class`) — `[Constants.cs:Constants]`
   - `SitecoreAuthAudience = "https://api.sitecorecloud.io"`
   - `SitecoreAuthGrantType = "client_credentials"`
   - `SitecoreCloudAuthTokenUrl = "https://auth.sitecorecloud.io/oauth/token"`
   - `SitecoreHttpClientName = "Sitecore.API.Foundation.Authorization.HttpClient"`
+  - `SitecoreOptionsNamePrefix = "Sitecore.API.Foundation.Authorization.Options"`
+  - `DefaultConfigurationSectionName = "SitecoreAuthentication"`
 
 ## Invariants
 
@@ -38,8 +40,19 @@ through `IOptions<SitecoreTokenServiceOptions>` by the registration methods in
 - The options class performs no validation of `MaxCacheSize`,
   `CleanupThreshold`, or `CleanupInterval`; it is a plain settable POCO
   `[SitecoreTokenServiceOptions.cs:SitecoreTokenServiceOptions]`.
-- `SitecoreHttpClientName` is the single named `HttpClient` key shared by
-  registration and resolution `[Constants.cs:SitecoreHttpClientName]`.
+- `MaxCacheSize`, `CleanupThreshold`, and `CleanupInterval` are read by the
+  shared singleton `SitecoreTokenCache` from the default unnamed options
+  registration (`Options.DefaultName`), while typed `<TClient>` registrations
+  read per-type named options (`$"{Constants.SitecoreOptionsNamePrefix}.{typeName}"`)
+  for `AuthTokenUrl` `[Constants.cs:SitecoreOptionsNamePrefix]`.
+- `Constants.DefaultConfigurationSectionName` (`"SitecoreAuthentication"`) is the
+  shared default section name used across `IConfiguration` DI overloads and
+  `ISitecoreAuthenticationBuilder<TClient>.ConfigureOptions`
+  `[Constants.cs:DefaultConfigurationSectionName]`.
+- `SitecoreHttpClientName` is the base named `HttpClient` key for untyped
+  registration and resolution, while typed `<TClient>` registrations append
+  `.{typeName}` (`$"{Constants.SitecoreHttpClientName}.{typeName}"`) for
+  per-type `HttpClient` isolation `[Constants.cs:SitecoreHttpClientName]`.
 
 ## Side Effects
 

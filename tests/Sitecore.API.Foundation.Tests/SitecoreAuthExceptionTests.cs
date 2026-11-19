@@ -1,7 +1,6 @@
 using System;
 using Shouldly;
 using Sitecore.API.Foundation.Authorization.Exceptions;
-using Xunit;
 
 namespace Sitecore.API.Foundation.Tests;
 
@@ -51,10 +50,22 @@ public class SitecoreAuthHttpExceptionTests
         var exception = new SitecoreAuthHttpException(statusCode, requestUrl, message);
 
         // Assert
+        exception.ShouldBeAssignableTo<SitecoreAuthException>();
         exception.StatusCode.ShouldBe(statusCode);
         exception.RequestUrl.ShouldBe(requestUrl);
         exception.Message.ShouldBe(message);
         exception.InnerException.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Constructor_WithNullRequestUrl_SetsRequestUrlToNull()
+    {
+        var exception = new SitecoreAuthHttpException(502, requestUrl: null, "Bad Gateway");
+
+        exception.ShouldBeAssignableTo<SitecoreAuthException>();
+        exception.StatusCode.ShouldBe(502);
+        exception.RequestUrl.ShouldBeNull();
+        exception.Message.ShouldBe("Bad Gateway");
     }
 
     [Fact]
@@ -70,6 +81,7 @@ public class SitecoreAuthHttpExceptionTests
         var exception = new SitecoreAuthHttpException(statusCode, requestUrl, message, innerException);
 
         // Assert
+        exception.ShouldBeAssignableTo<SitecoreAuthException>();
         exception.StatusCode.ShouldBe(statusCode);
         exception.RequestUrl.ShouldBe(requestUrl);
         exception.Message.ShouldBe(message);
@@ -89,6 +101,7 @@ public class SitecoreAuthResponseExceptionTests
         var exception = new SitecoreAuthResponseException(message);
 
         // Assert
+        exception.ShouldBeAssignableTo<SitecoreAuthException>();
         exception.Message.ShouldBe(message);
         exception.InnerException.ShouldBeNull();
     }
@@ -104,6 +117,7 @@ public class SitecoreAuthResponseExceptionTests
         var exception = new SitecoreAuthResponseException(message, innerException);
 
         // Assert
+        exception.ShouldBeAssignableTo<SitecoreAuthException>();
         exception.Message.ShouldBe(message);
         exception.InnerException.ShouldBe(innerException);
     }

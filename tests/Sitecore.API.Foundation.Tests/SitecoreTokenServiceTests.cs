@@ -1,21 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Shouldly;
-using Sitecore.API.Foundation.Authorization;
 using Sitecore.API.Foundation.Authorization.Abstractions;
 using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.Exceptions;
 using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
-using Microsoft.Extensions.Options;
 
 namespace Sitecore.API.Foundation.Tests;
 
@@ -23,7 +24,7 @@ public class SitecoreTokenServiceTests : IDisposable
 {
     private readonly TestHttpMessageHandler _mockMessageHandler;
     private readonly HttpClient _httpClient;
-    private readonly ISitecoreTokenCache _mockTokenCache;
+    private readonly ISitecoreTokenCache _tokenCache;
     private readonly SitecoreTokenService _service;
     private readonly SitecoreAuthClientCredentials _testCredentials;
 
@@ -34,9 +35,9 @@ public class SitecoreTokenServiceTests : IDisposable
 
         // Create a real cache instance for most tests
         var options = Options.Create(new SitecoreTokenServiceOptions());
-        _mockTokenCache = new SitecoreTokenCache(options);
+        _tokenCache = new SitecoreTokenCache(options);
 
-        _service = new SitecoreTokenService(_httpClient, _mockTokenCache, options);
+        _service = new SitecoreTokenService(_httpClient, _tokenCache, options);
         _testCredentials = new SitecoreAuthClientCredentials("test-client-id", "test-client-secret");
     }
 
@@ -45,7 +46,7 @@ public class SitecoreTokenServiceTests : IDisposable
     {
         // Arrange & Act & Assert
         var options = Options.Create(new SitecoreTokenServiceOptions());
-        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService(null!, _mockTokenCache, options))
+        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService(null!, _tokenCache, options))
             .ParamName.ShouldBe("httpClient");
     }
 
@@ -59,10 +60,15 @@ public class SitecoreTokenServiceTests : IDisposable
     }
 
     [Fact]
-    public void Constructor_WithNullOptions_ShouldThrowArgumentNullException()
+    public void Constructor_WithNullOptions_OrNullOptionsValue_ShouldThrowArgumentNullException()
     {
         // Arrange & Act & Assert
-        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService(_httpClient, _mockTokenCache, null!))
+        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService(_httpClient, _tokenCache, null!))
+            .ParamName.ShouldBe("options");
+
+        var nullValueOptions = Substitute.For<IOptions<SitecoreTokenServiceOptions>>();
+        nullValueOptions.Value.Returns((SitecoreTokenServiceOptions)null!);
+        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService(_httpClient, _tokenCache, nullValueOptions))
             .ParamName.ShouldBe("options");
     }
 
@@ -75,15 +81,10 @@ public class SitecoreTokenServiceTests : IDisposable
         {
             AuthTokenUrl = customUrl
         });
-        var cache = new SitecoreTokenCache(options);
+        using var cache = new SitecoreTokenCache(options);
         var service = new SitecoreTokenService(_httpClient, cache, options);
 
-        var authResponse = new { access_token = "test-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse();
 
         _mockMessageHandler.SetResponse(httpResponse);
 
@@ -102,15 +103,10 @@ public class SitecoreTokenServiceTests : IDisposable
     {
         // Arrange
         var defaultOptions = Options.Create(new SitecoreTokenServiceOptions());
-        var cache = new SitecoreTokenCache(defaultOptions);
+        using var cache = new SitecoreTokenCache(defaultOptions);
         var service = new SitecoreTokenService(_httpClient, cache, defaultOptions);
 
-        var authResponse = new { access_token = "test-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse();
 
         _mockMessageHandler.SetResponse(httpResponse);
 
@@ -133,11 +129,11 @@ public class SitecoreTokenServiceTests : IDisposable
         {
             AuthTokenUrl = invalidUrl
         });
-        var cache = new SitecoreTokenCache(options);
+        using var cache = new SitecoreTokenCache(options);
         var service = new SitecoreTokenService(_httpClient, cache, options);
 
         // Act & Assert
-        await Should.ThrowAsync<Exception>(() => service.GetSitecoreAuthToken(_testCredentials));
+        await Should.ThrowAsync<SitecoreAuthException>(() => service.GetSitecoreAuthToken(_testCredentials));
     }
 
     [Fact]
@@ -146,12 +142,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Arrange
         var expectedToken = "test-access-token";
         var expiresIn = 3600;
-        var authResponse = new { access_token = expectedToken, expires_in = expiresIn };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse(expectedToken, expiresIn);
 
         _mockMessageHandler.SetResponse(httpResponse);
 
@@ -223,12 +214,7 @@ public class SitecoreTokenServiceTests : IDisposable
     public async Task GetSitecoreAuthToken_WithEmptyAccessToken_ShouldThrowSitecoreAuthResponseException()
     {
         // Arrange
-        var authResponse = new { access_token = "", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse(accessToken: "", expiresIn: 3600);
 
         _mockMessageHandler.SetResponse(httpResponse);
 
@@ -245,12 +231,7 @@ public class SitecoreTokenServiceTests : IDisposable
         // Arrange
         var expectedToken = "test-access-token";
         var expiresIn = 3600;
-        var authResponse = new { access_token = expectedToken, expires_in = expiresIn };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse(expectedToken, expiresIn);
 
         _mockMessageHandler.SetResponse(httpResponse);
 
@@ -270,12 +251,7 @@ public class SitecoreTokenServiceTests : IDisposable
         var credentials1 = new SitecoreAuthClientCredentials("client1", "secret1");
         var credentials2 = new SitecoreAuthClientCredentials("client2", "secret2");
 
-        var authResponse = new { access_token = "test-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse();
 
         _mockMessageHandler.SetResponse(httpResponse);
 
@@ -296,21 +272,8 @@ public class SitecoreTokenServiceTests : IDisposable
         var refreshedToken = "refreshed-token";
         var expiresIn = 3600;
 
-        // Setup first call for original token
-        var originalResponse = new { access_token = originalToken, expires_in = expiresIn };
-        var originalJsonResponse = JsonSerializer.Serialize(originalResponse);
-        var originalHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(originalJsonResponse, Encoding.UTF8, "application/json")
-        };
-
-        // Setup second call for refreshed token
-        var refreshedResponse = new { access_token = refreshedToken, expires_in = expiresIn };
-        var refreshedJsonResponse = JsonSerializer.Serialize(refreshedResponse);
-        var refreshedHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(refreshedJsonResponse, Encoding.UTF8, "application/json")
-        };
+        var originalHttpResponse = TestHttpResponseHelper.CreateTokenResponse(originalToken, expiresIn);
+        var refreshedHttpResponse = TestHttpResponseHelper.CreateTokenResponse(refreshedToken, expiresIn);
 
         _mockMessageHandler.SetResponses(originalHttpResponse, refreshedHttpResponse);
 
@@ -341,12 +304,7 @@ public class SitecoreTokenServiceTests : IDisposable
     public async Task GetSitecoreAuthToken_SendsCorrectRequestPayload()
     {
         // Arrange
-        var authResponse = new { access_token = "test-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse();
 
         _mockMessageHandler.SetResponse(httpResponse);
 
@@ -370,100 +328,98 @@ public class SitecoreTokenServiceTests : IDisposable
     [Fact]
     public async Task GetSitecoreAuthToken_ConcurrentRequests_ShouldHandleThreadSafety()
     {
-        // Arrange
-        var authResponse = new { access_token = "test-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        // Arrange - Genuine concurrent execution using an async barrier
+        var allArrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var arrivedCount = 0;
+        const int callerCount = 10;
+
+        using var barrierHandler = new DelegateHttpMessageHandler(async (_, _, ct) =>
         {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+            if (Interlocked.Increment(ref arrivedCount) == callerCount)
+            {
+                allArrived.TrySetResult();
+            }
 
-        _mockMessageHandler.SetResponse(httpResponse);
-
+            await allArrived.Task.WaitAsync(ct);
+            return TestHttpResponseHelper.CreateTokenResponse("concurrent-token");
+        });
+        using var concurrentClient = new HttpClient(barrierHandler);
+        var options = Options.Create(new SitecoreTokenServiceOptions());
+        using var cache = new SitecoreTokenCache(options);
+        var concurrentService = new SitecoreTokenService(concurrentClient, cache, options);
         var credentials = new SitecoreAuthClientCredentials("concurrent-test", "concurrent-secret");
 
         // Act
-        var tasks = Enumerable.Range(0, 10)
-            .Select(_ => _service.GetSitecoreAuthToken(credentials))
+        var tasks = Enumerable.Range(0, callerCount)
+            .Select(_ => concurrentService.GetSitecoreAuthToken(credentials))
             .ToArray();
 
         var results = await Task.WhenAll(tasks);
 
         // Assert
-        results.ShouldAllBe(token => !string.IsNullOrEmpty(token.AccessToken));
-        results.All(token => token.AccessToken == "test-token").ShouldBeTrue();
-
-        // All requests should return the same cached token instance after the first request
-        var distinctTokens = results.Distinct().Count();
-        distinctTokens.ShouldBe(1);
-
-        // Should only make one HTTP call due to caching
-        _mockMessageHandler.RequestCount.ShouldBe(1);
+        results.ShouldAllBe(token => token.AccessToken == "concurrent-token");
+        cache.CacheSize.ShouldBe(1);
+        cache.GetToken(credentials).ShouldNotBeNull();
     }
 
     [Fact]
     public async Task TryRefreshSitecoreAuthToken_ConcurrentRefresh_ShouldHandleThreadSafety()
     {
-        // Arrange
-        var originalToken = "original-token";
-        var refreshedToken = "refreshed-token";
-        var expiresIn = 3600;
-
-        var originalResponse = new { access_token = originalToken, expires_in = expiresIn };
-        var originalJsonResponse = JsonSerializer.Serialize(originalResponse);
-        var originalHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(originalJsonResponse, Encoding.UTF8, "application/json")
-        };
-
-        var refreshedResponse = new { access_token = refreshedToken, expires_in = expiresIn };
-        var refreshedJsonResponse = JsonSerializer.Serialize(refreshedResponse);
-        var refreshedHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(refreshedJsonResponse, Encoding.UTF8, "application/json")
-        };
-
-        _mockMessageHandler.SetResponses(
-            originalHttpResponse,
-            refreshedHttpResponse,
-            refreshedHttpResponse,
-            refreshedHttpResponse
-        );
-
+        // Arrange - Prime initial token, then race 5 concurrent refreshes behind a barrier
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("initial-token"));
         var credentials = new SitecoreAuthClientCredentials("refresh-test", "refresh-secret");
+        var initialToken = await _service.GetSitecoreAuthToken(credentials);
 
-        // Act
-        var originalTokenResult = await _service.GetSitecoreAuthToken(credentials);
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("refreshed-token"));
+        const int contenderCount = 5;
+        var startGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readyCount = 0;
 
-        // For concurrent refresh, we need to be careful because the token might be removed by one thread
-        // while another is trying to refresh it. Let's test sequential refreshes instead.
-        var firstRefresh = await _service.TryRefreshSitecoreAuthToken(originalTokenResult);
-        var secondRefresh = await _service.TryRefreshSitecoreAuthToken(firstRefresh);
+        var tasks = Enumerable.Range(0, contenderCount).Select(_ => Task.Run(async () =>
+        {
+            if (Interlocked.Increment(ref readyCount) == contenderCount)
+            {
+                startGate.TrySetResult();
+            }
+
+            await startGate.Task;
+            return await _service.TryRefreshSitecoreAuthToken(initialToken);
+        })).ToArray();
+
+        // Act - Await all individually so we observe exactly 1 success and (contenderCount - 1) ArgumentExceptions
+        var successes = new List<SitecoreAuthToken>();
+        var failures = new List<ArgumentException>();
+        foreach (var task in tasks)
+        {
+            try
+            {
+                successes.Add(await task);
+            }
+            catch (ArgumentException ex)
+            {
+                failures.Add(ex);
+            }
+        }
 
         // Assert
-        firstRefresh.AccessToken.ShouldBe(refreshedToken);
-        firstRefresh.ShouldNotBe(originalTokenResult);
-
-        secondRefresh.AccessToken.ShouldBe(refreshedToken);
-        secondRefresh.ShouldNotBe(firstRefresh);
+        successes.Count.ShouldBe(1);
+        successes[0].AccessToken.ShouldBe("refreshed-token");
+        failures.Count.ShouldBe(contenderCount - 1);
+        _tokenCache.CacheSize.ShouldBe(1);
+        _tokenCache.GetToken(credentials).ShouldBe(successes[0]);
     }
 
     [Fact]
     public async Task GetSitecoreAuthToken_MultipleServicesWithSameCache_ShouldShareCache()
     {
         // Arrange
-        var authResponse = new { access_token = "shared-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse("shared-token");
 
         // Create a second service with its own HttpClient but SAME cache
-        var secondMockHandler = new TestHttpMessageHandler();
-        var secondHttpClient = new HttpClient(secondMockHandler);
+        using var secondMockHandler = new TestHttpMessageHandler();
+        using var secondHttpClient = new HttpClient(secondMockHandler);
         var options = Options.Create(new SitecoreTokenServiceOptions());
-        var secondService = new SitecoreTokenService(secondHttpClient, _mockTokenCache, options);
+        var secondService = new SitecoreTokenService(secondHttpClient, _tokenCache, options);
 
         _mockMessageHandler.SetResponse(httpResponse);
         secondMockHandler.SetResponse(httpResponse);
@@ -478,10 +434,6 @@ public class SitecoreTokenServiceTests : IDisposable
         tokenFromFirstService.ShouldBe(tokenFromSecondService);
         _mockMessageHandler.RequestCount.ShouldBe(1); // Only the first service should make the HTTP call
         secondMockHandler.RequestCount.ShouldBe(0); // Second service should get cached token
-
-        // Cleanup
-        secondHttpClient.Dispose();
-        secondMockHandler.Dispose();
     }
 
     [Fact]
@@ -490,206 +442,122 @@ public class SitecoreTokenServiceTests : IDisposable
         // Arrange
         var shortLivedToken = "short-lived-token";
         var newToken = "new-token";
-
-        // First response with very short expiration
-        var firstResponse = new { access_token = shortLivedToken, expires_in = 1 };
-        var firstJsonResponse = JsonSerializer.Serialize(firstResponse);
-        var firstHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(firstJsonResponse, Encoding.UTF8, "application/json")
-        };
-
-        // Second response with normal expiration
-        var secondResponse = new { access_token = newToken, expires_in = 3600 };
-        var secondJsonResponse = JsonSerializer.Serialize(secondResponse);
-        var secondHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(secondJsonResponse, Encoding.UTF8, "application/json")
-        };
-
-        _mockMessageHandler.SetResponses(firstHttpResponse, secondHttpResponse);
-
         var credentials = new SitecoreAuthClientCredentials("expiry-test", "expiry-secret");
+        var expiredToken = new SitecoreAuthToken(shortLivedToken, DateTimeOffset.UtcNow.AddSeconds(-1));
+
+        _tokenCache.SetToken(credentials, expiredToken);
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse(newToken));
 
         // Act
-        var firstToken = await _service.GetSitecoreAuthToken(credentials);
-
-        // Wait for token to expire
-        await Task.Delay(2000);
-
         var secondToken = await _service.GetSitecoreAuthToken(credentials);
 
         // Assert
-        firstToken.AccessToken.ShouldBe(shortLivedToken);
         secondToken.AccessToken.ShouldBe(newToken);
-        firstToken.ShouldNotBe(secondToken);
-
-        // Should have made two HTTP calls
-        _mockMessageHandler.RequestCount.ShouldBe(2);
-    }
-
-    [Fact]
-    public async Task GetSitecoreAuthToken_WithSameCredentials_ShouldReuseToken()
-    {
-        // Arrange
-        var authResponse = new { access_token = "reuse-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
-
-        _mockMessageHandler.SetResponse(httpResponse);
-
-        // Act
-        var token1 = await _service.GetSitecoreAuthToken(_testCredentials);
-        var token2 = await _service.GetSitecoreAuthToken(_testCredentials);
-        var token3 = await _service.GetSitecoreAuthToken(_testCredentials);
-
-        // Assert
-        token1.ShouldBe(token2);
-        token2.ShouldBe(token3);
-
-        // Should only make one HTTP call
+        secondToken.ShouldNotBe(expiredToken);
         _mockMessageHandler.RequestCount.ShouldBe(1);
     }
 
     [Fact]
-    public async Task GetSitecoreAuthToken_ShouldDisposeHttpResponse()
+    public async Task GetSitecoreAuthToken_ShouldDisposeHttpResponseOnSuccessAndError()
     {
         // Arrange
-        var authResponse = new { access_token = "test-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        var successResponse = new TrackingHttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
+            Content = new StringContent("{\"access_token\":\"disposed-tok\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
         };
+        var errorResponse = new TrackingHttpResponseMessage(HttpStatusCode.BadRequest);
 
-        _mockMessageHandler.SetResponse(httpResponse);
+        var nextResponse = (HttpResponseMessage)successResponse;
+        using var handler = new DelegateHttpMessageHandler(_ => nextResponse);
+        using var httpClient = new HttpClient(handler);
+        var options = Options.Create(new SitecoreTokenServiceOptions());
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(httpClient, cache, options);
 
-        // Act
-        var result = await _service.GetSitecoreAuthToken(_testCredentials);
+        // Act & Assert - Success path
+        var result = await service.GetSitecoreAuthToken(_testCredentials);
+        result.AccessToken.ShouldBe("disposed-tok");
+        successResponse.IsDisposed.ShouldBeTrue();
 
-        // Assert
-        result.AccessToken.ShouldNotBeNull();
-        // Note: Due to cloning in the mock handler, we can't directly test disposal,
-        // but the implementation should use 'using' statements for proper disposal
+        // Act & Assert - Error path
+        nextResponse = errorResponse;
+        await Should.ThrowAsync<SitecoreAuthHttpException>(() =>
+            service.GetSitecoreAuthToken(new SitecoreAuthClientCredentials("other", "secret")));
+        errorResponse.IsDisposed.ShouldBeTrue();
     }
 
     [Fact]
     public async Task GetSitecoreAuthToken_ShouldCleanupExpiredTokensAutomatically()
     {
         // Arrange
-        var shortLivedResponse = new { access_token = "short-lived", expires_in = 1 };
-        var validResponse = new { access_token = "valid-token", expires_in = 3600 };
-
-        var shortLivedHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
+        var options = Options.Create(new SitecoreTokenServiceOptions
         {
-            Content = new StringContent(JsonSerializer.Serialize(shortLivedResponse), Encoding.UTF8, "application/json")
-        };
+            MaxCacheSize = 20,
+            CleanupThreshold = 15,
+            CleanupInterval = TimeSpan.FromHours(1)
+        });
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(_httpClient, cache, options);
+        cache.PerformCleanup();
 
-        var validHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(validResponse), Encoding.UTF8, "application/json")
-        };
-
-        // Create many expired tokens to trigger cleanup threshold
-        var expiredCredentials = new List<SitecoreAuthClientCredentials>();
+        var expiredTimestamp = DateTimeOffset.UtcNow.AddSeconds(-1);
         for (int i = 0; i < 16; i++) // Exceed CleanupThreshold of 15
         {
-            expiredCredentials.Add(new SitecoreAuthClientCredentials($"expired-{i}", $"secret-{i}"));
+            cache.SetToken(
+                new SitecoreAuthClientCredentials($"expired-{i}", $"secret-{i}"),
+                new SitecoreAuthToken("short-lived", expiredTimestamp));
         }
+
+        cache.CacheSize.ShouldBe(16);
 
         var validCredentials = new SitecoreAuthClientCredentials("valid", "secret");
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("valid-token"));
 
-        // Set up responses for all expired tokens plus the valid one
-        var responses = new List<HttpResponseMessage>();
-        for (int i = 0; i < 16; i++)
-        {
-            responses.Add(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(JsonSerializer.Serialize(shortLivedResponse), Encoding.UTF8, "application/json")
-            });
-        }
-        responses.Add(validHttpResponse);
-
-        _mockMessageHandler.SetResponses(responses.ToArray());
-
-        // Act - Create expired tokens
-        foreach (var creds in expiredCredentials)
-        {
-            await _service.GetSitecoreAuthToken(creds);
-        }
-
-        // Wait for tokens to expire
-        await Task.Delay(2000);
-
-        // Create a new valid token which should trigger cleanup due to threshold
-        var validToken = await _service.GetSitecoreAuthToken(validCredentials);
+        // Act - Request for a new valid token should trigger threshold-based cleanup
+        var validToken = await service.GetSitecoreAuthToken(validCredentials);
 
         // Assert
         validToken.AccessToken.ShouldBe("valid-token");
-
-        // The cache should have been cleaned up during the operation
-        var cacheSize = _mockTokenCache.CacheSize;
-        cacheSize.ShouldBeLessThanOrEqualTo(10); // Should respect max cache size and cleanup expired tokens
-        cacheSize.ShouldBeGreaterThan(0); // Should still contain the valid token
+        cache.CacheSize.ShouldBe(1);
     }
 
     [Fact]
     public async Task GetSitecoreAuthToken_ShouldCleanupOnlyExpiredTokens()
     {
         // Arrange
-        var expiredResponse = new { access_token = "expired-token", expires_in = 1 };
-        var validResponse = new { access_token = "valid-token", expires_in = 3600 };
-
-        var expiredHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(expiredResponse), Encoding.UTF8, "application/json")
-        };
-
-        var validHttpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(validResponse), Encoding.UTF8, "application/json")
-        };
-
         var expiredCredentials = new SitecoreAuthClientCredentials("expired", "secret1");
         var validCredentials1 = new SitecoreAuthClientCredentials("valid1", "secret2");
         var validCredentials2 = new SitecoreAuthClientCredentials("valid2", "secret3");
 
-        _mockMessageHandler.SetResponses(expiredHttpResponse, validHttpResponse, validHttpResponse);
+        _mockMessageHandler.SetResponses(
+            TestHttpResponseHelper.CreateTokenResponse("valid-token-1"),
+            TestHttpResponseHelper.CreateTokenResponse("valid-token-2"));
 
-        // Act - Create one expired token and two valid tokens
-        await _service.GetSitecoreAuthToken(expiredCredentials);
+        // Act - Cache valid1 (establishes LastCleanup = UtcNow), then seed an expired token, then trigger cleanup on valid2 miss
         await _service.GetSitecoreAuthToken(validCredentials1);
-
-        // Wait for first token to expire
-        await Task.Delay(2000);
+        _tokenCache.SetToken(expiredCredentials, new SitecoreAuthToken("expired-token", DateTimeOffset.UtcNow.AddSeconds(-1)));
 
         // This should trigger cleanup and only remove the expired token
         await _service.GetSitecoreAuthToken(validCredentials2);
 
         // Assert
-        var cacheSize = _mockTokenCache.CacheSize;
-        cacheSize.ShouldBe(2); // Should have 2 valid tokens, expired one should be cleaned up
+        _tokenCache.CacheSize.ShouldBe(2); // Should have 2 valid tokens, expired one should be cleaned up
+        _tokenCache.GetToken(expiredCredentials).ShouldBeNull();
+        _tokenCache.GetToken(validCredentials1).ShouldNotBeNull();
+        _tokenCache.GetToken(validCredentials2).ShouldNotBeNull();
     }
 
     [Fact]
     public async Task GetSitecoreAuthToken_ShouldRespectMaxCacheSize()
     {
         // Arrange
-        var authResponse = new { access_token = "test-token", expires_in = 3600 };
-        var jsonResponse = JsonSerializer.Serialize(authResponse);
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse();
 
         _mockMessageHandler.SetResponse(httpResponse);
 
-        // Act - Create tokens up to the cache limit (assuming a reasonable limit)
+        // Act - Create tokens up to the cache limit
         var tasks = new List<Task<SitecoreAuthToken>>();
-        for (int i = 0; i < 15; i++) // Try to exceed a reasonable cache limit
+        for (int i = 0; i < 15; i++) // Exceed MaxCacheSize of 10
         {
             var credentials = new SitecoreAuthClientCredentials($"client-{i}", $"secret-{i}");
             tasks.Add(_service.GetSitecoreAuthToken(credentials));
@@ -698,8 +566,8 @@ public class SitecoreTokenServiceTests : IDisposable
         await Task.WhenAll(tasks);
 
         // Assert
-        var cacheSize = _mockTokenCache.CacheSize;
-        cacheSize.ShouldBeLessThanOrEqualTo(10); // Should not exceed reasonable cache size
+        var cacheSize = _tokenCache.CacheSize;
+        cacheSize.ShouldBe(10); // Should enforce MaxCacheSize of 10
     }
 
     [Fact]
@@ -730,11 +598,7 @@ public class SitecoreTokenServiceTests : IDisposable
     public async Task TryRefreshSitecoreAuthToken_WithCancellationToken_ShouldThrowTaskCanceledException()
     {
         // Arrange
-        var authResponse = new { access_token = "initial-token", expires_in = 3600 };
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(authResponse), Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse("initial-token");
         _mockMessageHandler.SetResponse(httpResponse);
 
         var initialToken = await _service.GetSitecoreAuthToken(_testCredentials);
@@ -797,11 +661,7 @@ public class SitecoreTokenServiceTests : IDisposable
         using var cache = new SitecoreTokenCache(options);
         var service = new SitecoreTokenService(_httpClient, cache, options);
 
-        var authResponse = new { access_token = "loopback-token", expires_in = 3600 };
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(authResponse), Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse("loopback-token");
         _mockMessageHandler.SetResponse(httpResponse);
 
         // Act
@@ -817,11 +677,7 @@ public class SitecoreTokenServiceTests : IDisposable
     public async Task GetSitecoreAuthToken_WithNonPositiveExpiresIn_ShouldThrowSitecoreAuthResponseException(int expiresIn)
     {
         // Arrange
-        var authResponse = new { access_token = "test-token", expires_in = expiresIn };
-        var httpResponse = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(authResponse), Encoding.UTF8, "application/json")
-        };
+        var httpResponse = TestHttpResponseHelper.CreateTokenResponse("test-token", expiresIn);
         _mockMessageHandler.SetResponse(httpResponse);
 
         // Act & Assert
@@ -830,37 +686,405 @@ public class SitecoreTokenServiceTests : IDisposable
         ex.Message.ShouldContain("non-positive expires_in");
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task MisconfiguredEmptyOrNullAuthTokenUrl_WithPopulatedDefaultPartition_ShouldThrowAndNotLeakOrEvictDefaultToken(string? invalidUrl)
+    {
+        // Arrange - Populate default partition via valid service
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("prod-secret-token"));
+        var prodToken = await _service.GetSitecoreAuthToken(_testCredentials);
+        _tokenCache.CacheSize.ShouldBe(1);
+
+        var misconfiguredOptions = Options.Create(new SitecoreTokenServiceOptions
+        {
+            AuthTokenUrl = invalidUrl!
+        });
+        var misconfiguredService = new SitecoreTokenService(_httpClient, _tokenCache, misconfiguredOptions);
+
+        // Act & Assert - Neither GetSitecoreAuthToken nor TryRefreshSitecoreAuthToken may hit or evict default partition
+        await Should.ThrowAsync<SitecoreAuthException>(() => misconfiguredService.GetSitecoreAuthToken(_testCredentials));
+        await Should.ThrowAsync<SitecoreAuthException>(() => misconfiguredService.TryRefreshSitecoreAuthToken(prodToken));
+
+        _tokenCache.GetToken(_testCredentials).ShouldBe(prodToken);
+        _mockMessageHandler.RequestCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_WithDefaultStructCredentials_ShouldThrowArgumentException()
+    {
+        var ex = await Should.ThrowAsync<ArgumentException>(() =>
+            _service.GetSitecoreAuthToken(default));
+        ex.ParamName.ShouldBe("credentials");
+        _mockMessageHandler.RequestCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_AndTryRefresh_WithDispatchProxyCache_ShouldFallbackToLegacyOneArgMethods()
+    {
+        // Arrange - DispatchProxy where 2-arg/3-arg methods return default (null) like dynamic mock proxies
+        var proxyCache = DispatchProxy.Create<ISitecoreTokenCache, LegacyDispatchProxyCache>();
+        var proxyState = (LegacyDispatchProxyCache)(object)proxyCache;
+
+        _mockMessageHandler.SetResponses(
+            TestHttpResponseHelper.CreateTokenResponse("dispatch-tok-1"),
+            TestHttpResponseHelper.CreateTokenResponse("dispatch-tok-2"));
+        var service = new SitecoreTokenService(
+            _httpClient,
+            proxyCache,
+            Options.Create(new SitecoreTokenServiceOptions()));
+
+        // Act - Miss -> Set (3-arg + 2-arg), Hit -> Get (1-arg fallback), Refresh -> Remove (1-arg fallback)
+        var t1 = await service.GetSitecoreAuthToken(_testCredentials);
+        var t2 = await service.GetSitecoreAuthToken(_testCredentials);
+        var refreshed = await service.TryRefreshSitecoreAuthToken(t1);
+
+        // Assert
+        t1.AccessToken.ShouldBe("dispatch-tok-1");
+        t2.ShouldBe(t1);
+        refreshed.AccessToken.ShouldBe("dispatch-tok-2");
+        proxyState.OneArgGetCount.ShouldBeGreaterThanOrEqualTo(3);
+        proxyState.OneArgSetCount.ShouldBe(2);
+        proxyState.OneArgRemoveCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_AndTryRefresh_WithNSubstituteOneArgStubs_ShouldFallbackToLegacyMethods()
+    {
+        var creds = new SitecoreAuthClientCredentials("sub-id", "sub-secret");
+        var tok1 = new SitecoreAuthToken("sub-tok-1", DateTimeOffset.UtcNow.AddMinutes(10));
+        var mockCache = Substitute.For<ISitecoreTokenCache>();
+        mockCache.GetToken(creds).Returns(tok1, (SitecoreAuthToken?)null);
+        mockCache.RemoveToken(tok1).Returns(creds);
+
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("sub-tok-2"));
+        var service = new SitecoreTokenService(
+            _httpClient,
+            mockCache,
+            Options.Create(new SitecoreTokenServiceOptions()));
+
+        var hit = await service.GetSitecoreAuthToken(creds);
+        hit.ShouldBe(tok1);
+
+        var refreshed = await service.TryRefreshSitecoreAuthToken(tok1);
+        refreshed.AccessToken.ShouldBe("sub-tok-2");
+
+        mockCache.Received(1).RemoveToken(tok1);
+        mockCache.Received(1).SetToken(creds, refreshed);
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_CanceledDuringBodyRead_AndPreCanceledCacheHit_ShouldPropagateCancellation()
+    {
+        // 1. Pre-canceled token on cache hit still throws TaskCanceledException before returning cached token
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("cached-tok"));
+        var cached = await _service.GetSitecoreAuthToken(_testCredentials);
+
+        using var preCanceledCts = new CancellationTokenSource();
+        preCanceledCts.Cancel();
+        await Should.ThrowAsync<TaskCanceledException>(() =>
+            _service.GetSitecoreAuthToken(_testCredentials, preCanceledCts.Token));
+
+        // 2. Pre-canceled TryRefreshSitecoreAuthToken preserves initial cached token
+        await Should.ThrowAsync<TaskCanceledException>(() =>
+            _service.TryRefreshSitecoreAuthToken(cached, preCanceledCts.Token));
+        _tokenCache.GetToken(_testCredentials).ShouldBe(cached);
+
+        // 3. In-flight TryRefreshSitecoreAuthToken cancellation during HTTP request
+        using var timeoutHandler = new TimeoutHttpMessageHandler();
+        using var timeoutClient = new HttpClient(timeoutHandler);
+        using var localCache = new SitecoreTokenCache(Options.Create(new SitecoreTokenServiceOptions()));
+        localCache.SetToken(_testCredentials, cached);
+        var timeoutService = new SitecoreTokenService(timeoutClient, localCache, Options.Create(new SitecoreTokenServiceOptions()));
+        using var inFlightRefreshCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(15));
+        await Should.ThrowAsync<TaskCanceledException>(() =>
+            timeoutService.TryRefreshSitecoreAuthToken(cached, inFlightRefreshCts.Token));
+
+        // 4. Cancellation while reading HTTP response body propagates OperationCanceledException (not SitecoreAuthResponseException)
+        using var bodyReadCts = new CancellationTokenSource();
+        using var cancelDuringReadHandler = new DelegateHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new CancelingHttpContent(bodyReadCts)
+        });
+        using var cancelClient = new HttpClient(cancelDuringReadHandler);
+        var cancelService = new SitecoreTokenService(
+            cancelClient,
+            localCache,
+            Options.Create(new SitecoreTokenServiceOptions()));
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            cancelService.GetSitecoreAuthToken(new SitecoreAuthClientCredentials("body-cancel", "s"), bodyReadCts.Token));
+    }
+
+    [Theory]
+    [InlineData("http://[::1]/oauth/token")]
+    [InlineData("http://[::1]:8080/oauth/token")]
+    [InlineData("https://localhost:8443/oauth/token")]
+    [InlineData("https://auth.sitecorecloud.io:8443/oauth/token")]
+    public async Task GetSitecoreAuthToken_WithAdditionalValidAuthUrls_ShouldSucceed(string validUrl)
+    {
+        var options = Options.Create(new SitecoreTokenServiceOptions { AuthTokenUrl = validUrl });
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(_httpClient, cache, options);
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("valid-url-tok"));
+
+        var token = await service.GetSitecoreAuthToken(_testCredentials);
+        token.AccessToken.ShouldBe("valid-url-tok");
+    }
+
+    [Theory]
+    [InlineData("ftp://auth.sitecorecloud.io/oauth/token")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("/oauth/token")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    [InlineData("http://user:pass@localhost/oauth/token")]
+    public async Task GetSitecoreAuthToken_WithAdditionalInvalidAuthUrls_ShouldThrowSitecoreAuthException(string? invalidUrl)
+    {
+        var options = Options.Create(new SitecoreTokenServiceOptions { AuthTokenUrl = invalidUrl! });
+        using var cache = new SitecoreTokenCache(options);
+        var service = new SitecoreTokenService(_httpClient, cache, options);
+
+        await Should.ThrowAsync<SitecoreAuthException>(() => service.GetSitecoreAuthToken(_testCredentials));
+        _mockMessageHandler.RequestCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task TryRefreshSitecoreAuthToken_EdgeCases_ShouldHandleExpiredFailureAndEndpointIsolation()
+    {
+        // 1. Refreshing an expired (not yet evicted/cleaned) cached token fetches a new valid token
+        var expired = new SitecoreAuthToken("expired-tok", DateTimeOffset.UtcNow.AddSeconds(-1));
+        _tokenCache.SetToken(_testCredentials, expired);
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("fresh-after-expired"));
+        var refreshedFromExpired = await _service.TryRefreshSitecoreAuthToken(expired);
+        refreshedFromExpired.AccessToken.ShouldBe("fresh-after-expired");
+
+        // After cleanup removes an expired token, TryRefresh throws ArgumentException
+        var cleanedCredentials = new SitecoreAuthClientCredentials("cleaned", "secret");
+        var expiredToClean = new SitecoreAuthToken("will-be-cleaned", DateTimeOffset.UtcNow.AddSeconds(-1));
+        _tokenCache.SetToken(cleanedCredentials, expiredToClean);
+        _tokenCache.PerformCleanup();
+        await Should.ThrowAsync<ArgumentException>(() => _service.TryRefreshSitecoreAuthToken(expiredToClean));
+
+        // 2. Refresh HTTP failure leaves old token removed from cache
+        _tokenCache.ClearCache();
+        _mockMessageHandler.SetResponses(
+            TestHttpResponseHelper.CreateTokenResponse("before-failure"),
+            new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var beforeFail = await _service.GetSitecoreAuthToken(_testCredentials);
+        _tokenCache.CacheSize.ShouldBe(1);
+
+        var httpEx = await Should.ThrowAsync<SitecoreAuthHttpException>(() => _service.TryRefreshSitecoreAuthToken(beforeFail));
+        httpEx.StatusCode.ShouldBe(500);
+        _tokenCache.CacheSize.ShouldBe(0);
+
+        // 3. Direct non-DI cross-endpoint refresh throws ArgumentException without evicting owning endpoint
+        using var sharedCache = new SitecoreTokenCache(Options.Create(new SitecoreTokenServiceOptions()));
+        var svcA = new SitecoreTokenService(_httpClient, sharedCache, Options.Create(new SitecoreTokenServiceOptions { AuthTokenUrl = "https://endpoint-a.example.com/oauth/token" }));
+        var svcB = new SitecoreTokenService(_httpClient, sharedCache, Options.Create(new SitecoreTokenServiceOptions { AuthTokenUrl = "https://endpoint-b.example.com/oauth/token" }));
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("tok-endpoint-a"));
+        var tokenA = await svcA.GetSitecoreAuthToken(_testCredentials);
+
+        await Should.ThrowAsync<ArgumentException>(() => svcB.TryRefreshSitecoreAuthToken(tokenA));
+        sharedCache.GetToken(_testCredentials, "https://endpoint-a.example.com/oauth/token").ShouldBe(tokenA);
+    }
+
+    [Fact]
+    public async Task GetSitecoreAuthToken_ResponseAndTransportEdgeCases_ShouldThrowExpectedExceptionsWithoutCaching()
+    {
+        // 1. Missing access_token property
+        _mockMessageHandler.SetResponse(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"expires_in\":3600}", Encoding.UTF8, "application/json")
+        });
+        await Should.ThrowAsync<SitecoreAuthResponseException>(() => _service.GetSitecoreAuthToken(_testCredentials));
+
+        // 2. Whitespace-only access_token property
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("   "));
+        await Should.ThrowAsync<SitecoreAuthResponseException>(() => _service.GetSitecoreAuthToken(_testCredentials));
+
+        // 3. Missing expires_in property (defaults to 0 <= 0)
+        _mockMessageHandler.SetResponse(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{\"access_token\":\"tok\"}", Encoding.UTF8, "application/json")
+        });
+        await Should.ThrowAsync<SitecoreAuthResponseException>(() => _service.GetSitecoreAuthToken(_testCredentials));
+
+        // 4. HTTP 401 and 500 preserve StatusCode and leave cache empty
+        foreach (var status in new[] { HttpStatusCode.Unauthorized, HttpStatusCode.InternalServerError })
+        {
+            _mockMessageHandler.SetResponse(new HttpResponseMessage(status));
+            var httpEx = await Should.ThrowAsync<SitecoreAuthHttpException>(() => _service.GetSitecoreAuthToken(_testCredentials));
+            httpEx.StatusCode.ShouldBe((int)status);
+        }
+
+        // 5. Transport-level HttpRequestException propagates
+        using var failingHandler = new DelegateHttpMessageHandler(_ => throw new HttpRequestException("Network unreachable"));
+        using var failingClient = new HttpClient(failingHandler);
+        var failingService = new SitecoreTokenService(failingClient, _tokenCache, Options.Create(new SitecoreTokenServiceOptions()));
+        await Should.ThrowAsync<HttpRequestException>(() => failingService.GetSitecoreAuthToken(_testCredentials));
+
+        _tokenCache.CacheSize.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task GenericSitecoreTokenService_DirectConstructionAndGuards_ShouldWorkAsExpected()
+    {
+        var options = Options.Create(new SitecoreTokenServiceOptions());
+        var logger = Substitute.For<ILogger<SitecoreTokenService<SitecoreTokenServiceTests>>>();
+
+        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService<SitecoreTokenServiceTests>(null!, _tokenCache, options))
+            .ParamName.ShouldBe("httpClient");
+        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService<SitecoreTokenServiceTests>(_httpClient, null!, options))
+            .ParamName.ShouldBe("tokenCache");
+        Should.Throw<ArgumentNullException>(() => new SitecoreTokenService<SitecoreTokenServiceTests>(_httpClient, _tokenCache, null!))
+            .ParamName.ShouldBe("options");
+
+        _mockMessageHandler.SetResponse(TestHttpResponseHelper.CreateTokenResponse("direct-typed-tok"));
+        var typedService = new SitecoreTokenService<SitecoreTokenServiceTests>(_httpClient, _tokenCache, options, logger);
+        typedService.ShouldBeAssignableTo<SitecoreTokenService>();
+        typedService.ShouldBeAssignableTo<ISitecoreTokenService<SitecoreTokenServiceTests>>();
+
+        var token = await typedService.GetSitecoreAuthToken(_testCredentials);
+        token.AccessToken.ShouldBe("direct-typed-tok");
+        logger.ShouldHaveLogged(LogLevel.Information, "Requesting new token");
+    }
+
     public void Dispose()
     {
+        _tokenCache?.Dispose();
         _httpClient?.Dispose();
         _mockMessageHandler?.Dispose();
+    }
+
+    private sealed class CancelingHttpContent(CancellationTokenSource cts) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+            => SerializeToStreamAsync(stream, context, CancellationToken.None);
+
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken cancellationToken)
+        {
+            await cts.CancelAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync(CancellationToken cancellationToken)
+        {
+            cts.Cancel();
+            return Task.FromCanceled<Stream>(cancellationToken);
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    public class LegacyDispatchProxyCache : DispatchProxy
+    {
+        private readonly Dictionary<SitecoreAuthClientCredentials, SitecoreAuthToken> _store = new();
+        public int OneArgGetCount { get; private set; }
+        public int OneArgSetCount { get; private set; }
+        public int OneArgRemoveCount { get; private set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            return targetMethod?.Name switch
+            {
+                nameof(ISitecoreTokenCache.GetToken) when args?.Length == 1 => Get((SitecoreAuthClientCredentials)args[0]!),
+                nameof(ISitecoreTokenCache.GetToken) when args?.Length == 2 => null,
+                nameof(ISitecoreTokenCache.SetToken) when args?.Length == 2 => Set((SitecoreAuthClientCredentials)args[0]!, (SitecoreAuthToken)args[1]!),
+                nameof(ISitecoreTokenCache.SetToken) when args?.Length == 3 => null,
+                nameof(ISitecoreTokenCache.RemoveToken) when args?.Length == 1 => Remove((SitecoreAuthToken)args[0]!),
+                nameof(ISitecoreTokenCache.RemoveToken) when args?.Length == 2 => null,
+                nameof(ISitecoreTokenCache.Dispose) => null,
+                _ => null
+            };
+        }
+
+        private SitecoreAuthToken? Get(SitecoreAuthClientCredentials credentials)
+        {
+            OneArgGetCount++;
+            return _store.TryGetValue(credentials, out var tok) ? tok : null;
+        }
+
+        private object? Set(SitecoreAuthClientCredentials credentials, SitecoreAuthToken token)
+        {
+            OneArgSetCount++;
+            _store[credentials] = token;
+            return null;
+        }
+
+        private SitecoreAuthClientCredentials? Remove(SitecoreAuthToken token)
+        {
+            OneArgRemoveCount++;
+            foreach (var kvp in _store)
+            {
+                if (kvp.Value.Equals(token))
+                {
+                    _store.Remove(kvp.Key);
+                    return kvp.Key;
+                }
+            }
+            return null;
+        }
     }
 }
 
 public class TestHttpMessageHandler : HttpMessageHandler
 {
+    private readonly Lock _syncLock = new();
     private readonly Queue<Func<Task<HttpResponseMessage>>> _responseFactories = new();
     private readonly List<HttpRequestMessage> _requests = new();
     private Func<Task<HttpResponseMessage>>? _defaultResponseFactory;
 
-    public int RequestCount => _requests.Count;
-    public HttpRequestMessage? LastRequest => _requests.LastOrDefault();
-    public IReadOnlyList<HttpRequestMessage> Requests => _requests.AsReadOnly();
+    public int RequestCount
+    {
+        get
+        {
+            lock (_syncLock) return _requests.Count;
+        }
+    }
+
+    public HttpRequestMessage? LastRequest
+    {
+        get
+        {
+            lock (_syncLock) return _requests.LastOrDefault();
+        }
+    }
+
+    public IReadOnlyList<HttpRequestMessage> Requests
+    {
+        get
+        {
+            lock (_syncLock) return _requests.ToArray();
+        }
+    }
 
     public void SetResponse(HttpResponseMessage response)
     {
-        _responseFactories.Clear();
-        _defaultResponseFactory = () => CloneResponseAsync(response);
+        lock (_syncLock)
+        {
+            _responseFactories.Clear();
+            _defaultResponseFactory = () => CloneResponseAsync(response);
+        }
     }
 
     public void SetResponses(params HttpResponseMessage[] responses)
     {
-        _responseFactories.Clear();
-        _defaultResponseFactory = null;
-        foreach (var response in responses)
+        lock (_syncLock)
         {
-            var responseToClone = response;
-            _responseFactories.Enqueue(() => CloneResponseAsync(responseToClone));
+            _responseFactories.Clear();
+            _defaultResponseFactory = null;
+            foreach (var response in responses)
+            {
+                var responseToClone = response;
+                _responseFactories.Enqueue(() => CloneResponseAsync(responseToClone));
+            }
         }
     }
 
@@ -897,34 +1121,43 @@ public class TestHttpMessageHandler : HttpMessageHandler
             return Task.FromCanceled<HttpResponseMessage>(cancellationToken);
         }
 
-        _requests.Add(request);
-
-        if (_responseFactories.Count > 0)
+        Func<Task<HttpResponseMessage>> factory;
+        lock (_syncLock)
         {
-            var responseFactory = _responseFactories.Dequeue();
-            return responseFactory();
+            _requests.Add(request);
+
+            if (_responseFactories.Count > 0)
+            {
+                factory = _responseFactories.Dequeue();
+            }
+            else if (_defaultResponseFactory != null)
+            {
+                factory = _defaultResponseFactory;
+            }
+            else
+            {
+                throw new InvalidOperationException("No response configured for request");
+            }
         }
 
-        if (_defaultResponseFactory != null)
-        {
-            return _defaultResponseFactory();
-        }
-
-        throw new InvalidOperationException("No response configured for request");
+        return factory();
     }
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            // Clear the queues but don't dispose original responses since they're managed by the test
-            _responseFactories.Clear();
-
-            foreach (var request in _requests)
+            lock (_syncLock)
             {
-                request?.Dispose();
+                // Clear the queues but don't dispose original responses since they're managed by the test
+                _responseFactories.Clear();
+
+                foreach (var request in _requests)
+                {
+                    request?.Dispose();
+                }
+                _requests.Clear();
             }
-            _requests.Clear();
         }
         base.Dispose(disposing);
     }
@@ -934,13 +1167,7 @@ public class TimeoutHttpMessageHandler : HttpMessageHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        // Simulate a timeout by delaying and then canceling
-        await Task.Delay(100, cancellationToken);
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
         throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout");
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
     }
 }
