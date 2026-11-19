@@ -12,19 +12,10 @@ namespace Sitecore.API.Foundation.Authorization.IntegrationTests.Fixtures;
 /// Mock HTTP message handler that simulates OAuth2 server responses for integration testing.
 /// This provides full integration test coverage without requiring Docker containers.
 /// </summary>
-public class MockOAuth2MessageHandler : HttpMessageHandler
+public class MockOAuth2MessageHandler(string validClientId = "test-client", string validClientSecret = "test-secret")
+    : HttpMessageHandler
 {
-    private readonly string _validClientId;
-    private readonly string _validClientSecret;
-    private readonly string _tokenEndpoint;
-    private int _requestCount = 0;
-
-    public MockOAuth2MessageHandler(string validClientId = "test-client", string validClientSecret = "test-secret", string tokenEndpoint = "http://localhost:8090/oauth/token")
-    {
-        _validClientId = validClientId;
-        _validClientSecret = validClientSecret;
-        _tokenEndpoint = tokenEndpoint;
-    }
+    private int _requestCount;
 
     /// <summary>
     /// Gets the number of requests that have been made to this handler.
@@ -74,7 +65,9 @@ public class MockOAuth2MessageHandler : HttpMessageHandler
             var clientSecret = requestData.TryGetProperty("client_secret", out var csProp) ? csProp.GetString() : null;
 
             // Validate credentials
-            if (grantType == "client_credentials" && clientId == _validClientId && clientSecret == _validClientSecret)
+            var isValidClient = clientId == validClientId ||
+                (clientId is not null && clientId.StartsWith($"{validClientId}-", StringComparison.Ordinal));
+            if (grantType == "client_credentials" && isValidClient && clientSecret == validClientSecret)
             {
                 // Generate a realistic JWT-like token
                 var currentTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();

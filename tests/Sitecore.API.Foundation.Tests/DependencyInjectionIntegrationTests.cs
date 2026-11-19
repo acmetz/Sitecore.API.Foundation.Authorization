@@ -1,13 +1,9 @@
 using System;
-using System.Net;
 using System.Net.Http;
-using System.Text.Json;
-using System.Text;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
-using Sitecore.API.Foundation.Authorization;
 using Sitecore.API.Foundation.Authorization.Abstractions;
-using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.DependencyInjection;
 using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
@@ -16,131 +12,96 @@ namespace Sitecore.API.Foundation.Tests;
 
 public class DependencyInjectionIntegrationTests
 {
-    [Fact]
-    public void FullDIIntegration_ShouldWorkEndToEnd()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        
-        // Register Sitecore authentication services
-        services.AddSitecoreAuthentication(options =>
-        {
-            options.MaxCacheSize = 5;
-            options.CleanupThreshold = 8;
-            options.CleanupInterval = TimeSpan.FromMinutes(2);
-        });
-
-        var serviceProvider = services.BuildServiceProvider();
-
-        // Act - Resolve services from DI container
-        var tokenService = serviceProvider.GetRequiredService<ISitecoreTokenService>();
-        var tokenCache = serviceProvider.GetRequiredService<ISitecoreTokenCache>();
-
-        // Assert
-        tokenService.ShouldNotBeNull();
-        tokenService.ShouldBeOfType<SitecoreTokenService>();
-        
-        tokenCache.ShouldNotBeNull();
-        tokenCache.ShouldBeOfType<SitecoreTokenCache>();
-        tokenCache.CacheSize.ShouldBe(0);
-    }
+    public sealed class TypedClientA;
+    public sealed class TypedClientB;
 
     [Fact]
-    public void DISingleton_ShouldUseSameServiceInstance()
+    public async Task EndToEndDI_ScopedService_ShouldAcquireShareCacheAcrossScopesAndRefresh()
     {
         // Arrange
+        using var handler = new DelegateHttpMessageHandler((_, attempt) =>
+            TestHttpResponseHelper.CreateTokenResponse($"di-scoped-token-{attempt}"));
+
         var services = new ServiceCollection();
-        services.AddSitecoreAuthenticationSingleton();
-        var serviceProvider = services.BuildServiceProvider();
+        services.AddSitecoreAuthentication(
+            configureOptions: options =>
+            {
+                options.MaxCacheSize = 5;
+                options.CleanupThreshold = 8;
+                options.CleanupInterval = TimeSpan.FromMinutes(2);
+                options.AuthTokenUrl = "https://di-auth.example.com/oauth/token";
+            },
+            configureClient: client => client.ConfigurePrimaryHttpMessageHandler(() => handler));
 
-        // Act
-        var service1 = serviceProvider.GetRequiredService<ISitecoreTokenService>();
-        var service2 = serviceProvider.GetRequiredService<ISitecoreTokenService>();
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetService<IHttpClientFactory>().ShouldNotBeNull();
 
-        // Assert
-        service1.ShouldBeSameAs(service2);
-    }
+        var credentials = new SitecoreAuthClientCredentials("di-client", "di-secret");
 
-    [Fact]
-    public void DIScoped_ShouldUseDifferentServiceInstancesAcrossScopes()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        services.AddSitecoreAuthentication();
-        var serviceProvider = services.BuildServiceProvider();
-
-        // Act
-        ISitecoreTokenService service1, service2;
+        // Act - Scope 1 fetches token; Scope 2 hits singleton cache; Scope 2 refreshes token
+        SitecoreTokenCache concreteCache;
+        SitecoreAuthToken token1;
         using (var scope1 = serviceProvider.CreateScope())
         {
-            service1 = scope1.ServiceProvider.GetRequiredService<ISitecoreTokenService>();
+            var svc1 = scope1.ServiceProvider.GetRequiredService<ISitecoreTokenService>();
+            svc1.ShouldBeOfType<SitecoreTokenService>();
+            concreteCache = scope1.ServiceProvider.GetRequiredService<ISitecoreTokenCache>()
+                .ShouldBeOfType<SitecoreTokenCache>();
+            token1 = await svc1.GetSitecoreAuthToken(credentials);
         }
-        
+
+        SitecoreAuthToken token2;
+        SitecoreAuthToken refreshed;
         using (var scope2 = serviceProvider.CreateScope())
         {
-            service2 = scope2.ServiceProvider.GetRequiredService<ISitecoreTokenService>();
+            var svc2 = scope2.ServiceProvider.GetRequiredService<ISitecoreTokenService>();
+            var cache2 = scope2.ServiceProvider.GetRequiredService<ISitecoreTokenCache>();
+            cache2.ShouldBeSameAs(concreteCache);
+
+            token2 = await svc2.GetSitecoreAuthToken(credentials);
+            refreshed = await svc2.TryRefreshSitecoreAuthToken(token2);
         }
 
         // Assert
-        service1.ShouldNotBeSameAs(service2);
+        token1.AccessToken.ShouldBe("di-scoped-token-1");
+        token2.ShouldBe(token1);
+        refreshed.AccessToken.ShouldBe("di-scoped-token-2");
+        handler.CallCount.ShouldBe(2);
+        concreteCache.CacheSize.ShouldBe(1);
     }
 
     [Fact]
-    public void DI_CacheShouldBeSingletonAcrossScopes()
+    public async Task EndToEndDI_MultipleTypedClients_ShouldPartitionSharedCacheAndUseConcreteTypes()
     {
         // Arrange
+        using var handlerA = new DelegateHttpMessageHandler(_ =>
+            TestHttpResponseHelper.CreateTokenResponse("di-typed-a"));
+        using var handlerB = new DelegateHttpMessageHandler(_ =>
+            TestHttpResponseHelper.CreateTokenResponse("di-typed-b"));
+
         var services = new ServiceCollection();
-        services.AddSitecoreAuthentication();
-        var serviceProvider = services.BuildServiceProvider();
+        services.AddSitecoreAuthentication<TypedClientA>(o => o.AuthTokenUrl = "https://auth-a.example.com/oauth/token")
+            .ConfigureHttpClient(b => b.ConfigurePrimaryHttpMessageHandler(() => handlerA));
+        services.AddSitecoreAuthenticationSingleton<TypedClientB>(o => o.AuthTokenUrl = "https://auth-b.example.com/oauth/token")
+            .ConfigureHttpClient(b => b.ConfigurePrimaryHttpMessageHandler(() => handlerB));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var svcA = serviceProvider.GetRequiredService<ISitecoreTokenService<TypedClientA>>();
+        var svcB = serviceProvider.GetRequiredService<ISitecoreTokenService<TypedClientB>>();
+        var sharedCache = serviceProvider.GetRequiredService<ISitecoreTokenCache>();
+
+        svcA.ShouldBeOfType<SitecoreTokenService<TypedClientA>>();
+        svcB.ShouldBeOfType<SitecoreTokenService<TypedClientB>>();
+
+        var sharedCreds = new SitecoreAuthClientCredentials("shared-id", "shared-secret");
 
         // Act
-        ISitecoreTokenCache cache1, cache2;
-        using (var scope1 = serviceProvider.CreateScope())
-        {
-            cache1 = scope1.ServiceProvider.GetRequiredService<ISitecoreTokenCache>();
-        }
-        
-        using (var scope2 = serviceProvider.CreateScope())
-        {
-            cache2 = scope2.ServiceProvider.GetRequiredService<ISitecoreTokenCache>();
-        }
+        var tokenA = await svcA.GetSitecoreAuthToken(sharedCreds);
+        var tokenB = await svcB.GetSitecoreAuthToken(sharedCreds);
 
         // Assert
-        cache1.ShouldBeSameAs(cache2);
-    }
-
-    [Fact]
-    public void DI_ShouldResolveAllDependencies()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        services.AddSitecoreAuthentication();
-        var serviceProvider = services.BuildServiceProvider();
-
-        // Act & Assert - Should not throw any exceptions
-        var httpClientService = serviceProvider.GetService<IHttpClientFactory>();
-        httpClientService.ShouldNotBeNull(); // HttpClient factory should be registered
-
-        var tokenService = serviceProvider.GetService<ISitecoreTokenService>();
-        tokenService.ShouldNotBeNull();
-
-        var tokenCache = serviceProvider.GetService<ISitecoreTokenCache>();
-        tokenCache.ShouldNotBeNull();
-    }
-
-    [Fact]
-    public void DI_ConfigurationIntegration_ShouldWorkCorrectly()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        services.AddSitecoreAuthentication();
-        var serviceProvider = services.BuildServiceProvider();
-
-        // Act
-        var tokenService = serviceProvider.GetRequiredService<ISitecoreTokenService>();
-
-        // Assert
-        tokenService.ShouldNotBeNull();
-        tokenService.ShouldBeOfType<SitecoreTokenService>();
+        tokenA.AccessToken.ShouldBe("di-typed-a");
+        tokenB.AccessToken.ShouldBe("di-typed-b");
+        sharedCache.CacheSize.ShouldBe(2);
     }
 }

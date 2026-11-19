@@ -28,7 +28,7 @@ We welcome contributions to the Sitecore.API.Foundation.Authorization project! T
 
 ### Prerequisites
 
-- .NET 8.0, 9.0, and 10.0 SDKs
+- .NET 10.0 and 11.0 SDKs
 - Visual Studio 2022 17.12+ or VS Code with C# Dev Kit
 - Git
 - Docker Desktop (optional, for Keycloak container integration tests)
@@ -57,7 +57,7 @@ Sitecore.API.Foundation.Authorization/
 Sitecore.API.Foundation.Authorization.slnx
 src/
    README.md                                              # EGM system blueprint & global invariants
-   Sitecore.API.Foundation.Authorization/                 # Main library (net8.0;net9.0;net10.0) & module contracts
+   Sitecore.API.Foundation.Authorization/                 # Main library (net10.0;net11.0) & module contracts
 tests/
    Sitecore.API.Foundation.Tests/                         # Unit tests
    Sitecore.API.Foundation.Authorization.IntegrationTests/  # Mock & Keycloak integration tests

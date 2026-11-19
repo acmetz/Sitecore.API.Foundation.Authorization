@@ -7,8 +7,8 @@ using Sitecore.API.Foundation.Authorization.Abstractions;
 using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.DependencyInjection;
 using Sitecore.API.Foundation.Authorization.Models;
-using Sitecore.API.Foundation.Authorization.Services;
 using System.Threading.Tasks;
+using NSubstitute;
 
 namespace Sitecore.API.Foundation.Tests;
 
@@ -44,7 +44,7 @@ public class ServiceCollectionExtensionsOverrideTests
         services.AddSingleton<ISitecoreTokenService, CustomTokenService>();
 
         services.AddSitecoreAuthentication();
-        var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
 
         var resolved = sp.GetRequiredService<ISitecoreTokenService>();
         resolved.ShouldBeOfType<CustomTokenService>();
@@ -57,7 +57,7 @@ public class ServiceCollectionExtensionsOverrideTests
         services.AddSingleton<ISitecoreTokenCache, CustomCache>();
 
         services.AddSitecoreAuthentication();
-        var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
 
         var resolved = sp.GetRequiredService<ISitecoreTokenCache>();
         resolved.ShouldBeOfType<CustomCache>();
@@ -70,7 +70,7 @@ public class ServiceCollectionExtensionsOverrideTests
         services.AddSingleton<ISitecoreTokenService, CustomTokenService>();
 
         services.AddSitecoreAuthenticationSingleton();
-        var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
 
         var resolved = sp.GetRequiredService<ISitecoreTokenService>();
         resolved.ShouldBeOfType<CustomTokenService>();
@@ -83,7 +83,7 @@ public class ServiceCollectionExtensionsOverrideTests
         services.AddSingleton<ISitecoreTokenCache, CustomCache>();
 
         services.AddSitecoreAuthenticationSingleton();
-        var sp = services.BuildServiceProvider();
+        using var sp = services.BuildServiceProvider();
 
         var resolved = sp.GetRequiredService<ISitecoreTokenCache>();
         resolved.ShouldBeOfType<CustomCache>();
@@ -101,8 +101,42 @@ public class ServiceCollectionExtensionsOverrideTests
             o.MaxCacheSize = 42;
         });
 
-        var sp = services.BuildServiceProvider();
-        var opts = sp.GetRequiredService<IOptions<SitecoreTokenServiceOptions>>().Value;
+        var sp = services;
+        using var provider = sp.BuildServiceProvider();
+        var opts = provider.GetRequiredService<IOptions<SitecoreTokenServiceOptions>>().Value;
         opts.MaxCacheSize.ShouldBe(42);
+    }
+
+    [Fact]
+    public void AddSitecoreAuthenticationSingleton_ShouldConfigureOptions_EvenWhenServicesPreRegistered()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ISitecoreTokenService, CustomTokenService>();
+        services.AddSingleton<ISitecoreTokenCache, CustomCache>();
+
+        services.AddSitecoreAuthenticationSingleton(o =>
+        {
+            o.MaxCacheSize = 84;
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var opts = provider.GetRequiredService<IOptions<SitecoreTokenServiceOptions>>().Value;
+        opts.MaxCacheSize.ShouldBe(84);
+        provider.GetRequiredService<ISitecoreTokenService>().ShouldBeOfType<CustomTokenService>();
+        provider.GetRequiredService<ISitecoreTokenCache>().ShouldBeOfType<CustomCache>();
+    }
+
+    [Fact]
+    public void AddSitecoreAuthenticationSingleton_Generic_ShouldRespectPreRegisteredTypedTokenService()
+    {
+        var customTyped = Substitute.For<ISitecoreTokenService<ServiceCollectionExtensionsOverrideTests>>();
+        var services = new ServiceCollection();
+        services.AddSingleton(customTyped);
+
+        services.AddSitecoreAuthenticationSingleton<ServiceCollectionExtensionsOverrideTests>();
+
+        using var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<ISitecoreTokenService<ServiceCollectionExtensionsOverrideTests>>()
+            .ShouldBeSameAs(customTyped);
     }
 }

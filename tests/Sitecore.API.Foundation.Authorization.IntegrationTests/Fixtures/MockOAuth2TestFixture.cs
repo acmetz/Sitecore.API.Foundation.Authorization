@@ -64,7 +64,7 @@ public class MockOAuth2TestFixture : IAsyncDisposable
             // This will be replaced during proper initialization
             if (_messageHandler == null)
             {
-                _messageHandler = new MockOAuth2MessageHandler(ClientId, ClientSecret, TokenEndpoint);
+                _messageHandler = new MockOAuth2MessageHandler(ClientId, ClientSecret);
             }
             
             if (_httpClient == null)
@@ -103,23 +103,14 @@ public class MockOAuth2TestFixture : IAsyncDisposable
     /// <summary>
     /// Initializes the mock OAuth2 server.
     /// </summary>
-    private async Task InitializeAsync()
+    private Task InitializeAsync()
     {
         try
         {
             // If we already have a client from the getter, we're good to go
-            if (_messageHandler == null)
-            {
-                _messageHandler = new MockOAuth2MessageHandler(ClientId, ClientSecret, TokenEndpoint);
-            }
-            
-            if (_httpClient == null)
-            {
-                _httpClient = new HttpClient(_messageHandler);
-            }
-            
-            // Simulate initialization delay
-            await Task.Delay(10);
+            _messageHandler ??= new MockOAuth2MessageHandler(ClientId, ClientSecret);
+            _httpClient ??= new HttpClient(_messageHandler);
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
@@ -136,24 +127,13 @@ public class MockOAuth2TestFixture : IAsyncDisposable
         
         try
         {
-            var response = await HttpClient.GetAsync($"{BaseUrl}/health");
+            using var response = await HttpClient.GetAsync($"{BaseUrl}/health");
             return response.IsSuccessStatusCode;
         }
         catch
         {
             return false;
         }
-    }
-
-    /// <summary>
-    /// Resets the mock server state (clears request count, etc.).
-    /// </summary>
-    public async Task ResetAsync()
-    {
-        await EnsureInitializedAsync();
-        // The message handler request count is read-only, but we can create a new instance if needed
-        // For now, this is a placeholder for future reset functionality
-        await Task.CompletedTask;
     }
 
     /// <summary>

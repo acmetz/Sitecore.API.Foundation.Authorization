@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Shouldly;
-using Xunit;
 
 namespace Sitecore.API.Foundation.Tests;
 
@@ -14,8 +13,13 @@ namespace Sitecore.API.Foundation.Tests;
 /// to ensure pipeline configurations stay in sync with project target frameworks,
 /// referenced files, symbol packaging, and NuGet OIDC Trusted Publishing requirements.
 /// </summary>
-public class GitHubWorkflowTests
+public partial class GitHubWorkflowTests
 {
+    [GeneratedRegex(@"run:\s*>\s*\r?\n(?:.*\r?\n)*?.*\\\s*\r?\n")]
+    private static partial Regex YamlFoldedScalarWithBackslashRegex();
+
+    [GeneratedRegex(@"^permissions:\s*\r?\n\s+contents:\s*read", RegexOptions.Multiline)]
+    private static partial Regex RootReadPermissionsRegex();
     private static readonly string RepoRoot = FindRepositoryRoot();
     private static readonly string NugetReleaseWorkflowPath = Path.Combine(RepoRoot, ".github", "workflows", "nuget-release.yml");
     private static readonly string PrCheckWorkflowPath = Path.Combine(RepoRoot, ".github", "workflows", "pr-check.yml");
@@ -61,7 +65,7 @@ public class GitHubWorkflowTests
         {
             var content = File.ReadAllText(workflowFile);
             // Using "run: >" (folded block scalar) with "\" line continuations is fragile in YAML
-            Regex.IsMatch(content, @"run:\s*>\s*\r?\n(?:.*\r?\n)*?.*\\\s*\r?\n").ShouldBeFalse(
+            YamlFoldedScalarWithBackslashRegex().IsMatch(content).ShouldBeFalse(
                 $"{Path.GetFileName(workflowFile)} should use 'run: |' instead of 'run: >' for multi-line commands with backslash continuations.");
         }
     }
@@ -107,7 +111,7 @@ public class GitHubWorkflowTests
         var nugetWorkflow = File.ReadAllText(NugetReleaseWorkflowPath);
 
         // Root permissions should be read-only
-        Regex.IsMatch(nugetWorkflow, @"^permissions:\s*\r?\n\s+contents:\s*read", RegexOptions.Multiline)
+        RootReadPermissionsRegex().IsMatch(nugetWorkflow)
             .ShouldBeTrue("Root workflow permissions in nuget-release.yml should be 'contents: read'.");
 
         // Release job should require v* tag, use 'release' environment, and request id-token: write
@@ -133,15 +137,14 @@ public class GitHubWorkflowTests
         var includeSymbols = propsDoc.Descendants("IncludeSymbols").FirstOrDefault()?.Value;
         var symbolFormat = propsDoc.Descendants("SymbolPackageFormat").FirstOrDefault()?.Value;
 
-        if (string.Equals(includeSymbols, "true", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(symbolFormat, "snupkg", StringComparison.OrdinalIgnoreCase))
-        {
-            var nugetWorkflow = File.ReadAllText(NugetReleaseWorkflowPath);
-            nugetWorkflow.ShouldContain("./nupkgs/SitecoreAPIAuthorization*.nupkg");
-            nugetWorkflow.ShouldContain("./nupkgs/SitecoreAPIAuthorization*.snupkg",
-                Case.Sensitive,
-                "Directory.Build.props enables snupkg symbol packages, so nuget-release.yml must upload *.snupkg artifacts.");
-        }
+        includeSymbols.ShouldBe("true");
+        symbolFormat.ShouldBe("snupkg");
+
+        var nugetWorkflow = File.ReadAllText(NugetReleaseWorkflowPath);
+        nugetWorkflow.ShouldContain("./nupkgs/SitecoreAPIAuthorization*.nupkg");
+        nugetWorkflow.ShouldContain("./nupkgs/SitecoreAPIAuthorization*.snupkg",
+            Case.Sensitive,
+            "Directory.Build.props enables snupkg symbol packages, so nuget-release.yml must upload *.snupkg artifacts.");
     }
 
     [Fact]

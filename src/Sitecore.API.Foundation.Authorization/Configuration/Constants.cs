@@ -24,4 +24,14 @@ internal static class Constants
     /// The logical name of the configured <see cref="System.Net.Http.HttpClient"/> registered in dependency injection.
     /// </summary>
     internal const string SitecoreHttpClientName = "Sitecore.API.Foundation.Authorization.HttpClient";
+
+    /// <summary>
+    /// The prefix used for named <see cref="SitecoreTokenServiceOptions"/> registrations in dependency injection.
+    /// </summary>
+    internal const string SitecoreOptionsNamePrefix = "Sitecore.API.Foundation.Authorization.Options";
+
+    /// <summary>
+    /// The default configuration section name used when binding <see cref="SitecoreTokenServiceOptions"/>.
+    /// </summary>
+    internal const string DefaultConfigurationSectionName = "SitecoreAuthentication";
 }
