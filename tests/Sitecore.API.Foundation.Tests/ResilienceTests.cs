@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,8 +9,8 @@ using Shouldly;
 using Sitecore.API.Foundation.Authorization.Abstractions;
 using Sitecore.API.Foundation.Authorization.Configuration;
 using Sitecore.API.Foundation.Authorization.DependencyInjection;
+using Sitecore.API.Foundation.Authorization.Exceptions;
 using Sitecore.API.Foundation.Authorization.Models;
-using Xunit;
 
 namespace Sitecore.API.Foundation.Tests;
 
@@ -31,15 +30,12 @@ public class ResilienceTests
                 resilience.Retry.Delay = TimeSpan.FromMilliseconds(1);
                 resilience.Retry.UseJitter = false;
             },
-            configureClient: builder => builder.ConfigurePrimaryHttpMessageHandler(() => new SimulatedTransientPrimaryHandler(_ =>
+            configureClient: builder => builder.ConfigurePrimaryHttpMessageHandler(() => new DelegateHttpMessageHandler(_ =>
             {
                 var current = Interlocked.Increment(ref requestCount);
                 return current < 3
                     ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
-                    : new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent("{\"access_token\":\"test-token\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
-                    };
+                    : TestHttpResponseHelper.CreateTokenResponse("test-token");
             })));
 
         using var sp = services.BuildServiceProvider();
@@ -68,15 +64,12 @@ public class ResilienceTests
                 resilience.Retry.Delay = TimeSpan.FromMilliseconds(1);
                 resilience.Retry.UseJitter = false;
             },
-            configureClient: builder => builder.ConfigurePrimaryHttpMessageHandler(() => new SimulatedTransientPrimaryHandler(_ =>
+            configureClient: builder => builder.ConfigurePrimaryHttpMessageHandler(() => new DelegateHttpMessageHandler(_ =>
             {
                 var current = Interlocked.Increment(ref requestCount);
                 return current < 3
                     ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
-                    : new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent("{\"access_token\":\"singleton-token\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
-                    };
+                    : TestHttpResponseHelper.CreateTokenResponse("singleton-token");
             })));
 
         var descriptor = services.Single(d => d.ServiceType == typeof(ISitecoreTokenService));
@@ -108,23 +101,20 @@ public class ResilienceTests
             configureClient: builder =>
             {
                 builder.ConfigureHttpClient(client => client.DefaultRequestHeaders.Add("X-Sitecore-Test", "configured-client"));
-                builder.ConfigurePrimaryHttpMessageHandler(() => new SimulatedTransientPrimaryHandler(request =>
+                builder.ConfigurePrimaryHttpMessageHandler(() => new DelegateHttpMessageHandler(request =>
                 {
                     if (request.Headers.TryGetValues("X-Sitecore-Test", out var values))
                     {
                         observedHeader = values.FirstOrDefault();
                     }
 
-                    return new HttpResponseMessage(HttpStatusCode.OK)
-                    {
-                        Content = new StringContent("{\"access_token\":\"client-token\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
-                    };
+                    return TestHttpResponseHelper.CreateTokenResponse("client-token");
                 }));
             });
 
         using var sp = services.BuildServiceProvider();
         var clientFactory = sp.GetRequiredService<IHttpClientFactory>();
-        var namedClient = clientFactory.CreateClient(Constants.SitecoreHttpClientName);
+        using var namedClient = clientFactory.CreateClient(Constants.SitecoreHttpClientName);
         namedClient.DefaultRequestHeaders.Contains("X-Sitecore-Test").ShouldBeTrue();
 
         var tokenService = sp.GetRequiredService<ISitecoreTokenService>();
@@ -143,14 +133,12 @@ public class ResilienceTests
         // Arrange
         var services = new ServiceCollection();
         var customHandlerInvoked = false;
-        using var customHttpClient = new HttpClient(new SimulatedTransientPrimaryHandler(_ =>
+        using var customHandler = new DelegateHttpMessageHandler(_ =>
         {
             customHandlerInvoked = true;
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent("{\"access_token\":\"factory-token\",\"expires_in\":3600}", Encoding.UTF8, "application/json")
-            };
-        }));
+            return TestHttpResponseHelper.CreateTokenResponse("factory-token");
+        });
+        using var customHttpClient = new HttpClient(customHandler);
 
         services.AddSitecoreAuthentication(httpClientFactory: _ => customHttpClient);
 
@@ -173,16 +161,62 @@ public class ResilienceTests
         result.ShouldBeSameAs(services);
     }
 
-    private sealed class SimulatedTransientPrimaryHandler : HttpMessageHandler
+    [Fact]
+    public async Task AddSitecoreAuthentication_WhenRetriesExhausted_ShouldThrowSitecoreAuthHttpException()
     {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _next;
+        var services = new ServiceCollection();
+        var requestCount = 0;
 
-        public SimulatedTransientPrimaryHandler(Func<HttpRequestMessage, HttpResponseMessage> next)
-        {
-            _next = next;
-        }
+        services.AddSitecoreAuthentication(
+            configureResilience: resilience =>
+            {
+                resilience.Retry.MaxRetryAttempts = 2;
+                resilience.Retry.Delay = TimeSpan.FromMilliseconds(1);
+                resilience.Retry.UseJitter = false;
+            },
+            configureClient: builder => builder.ConfigurePrimaryHttpMessageHandler(() => new DelegateHttpMessageHandler(_ =>
+            {
+                Interlocked.Increment(ref requestCount);
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            })));
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            => Task.FromResult(_next(request));
+        using var sp = services.BuildServiceProvider();
+        var tokenService = sp.GetRequiredService<ISitecoreTokenService>();
+
+        var ex = await Should.ThrowAsync<SitecoreAuthHttpException>(
+            () => tokenService.GetSitecoreAuthToken(new SitecoreAuthClientCredentials("id", "secret")));
+
+        ex.StatusCode.ShouldBe((int)HttpStatusCode.ServiceUnavailable);
+        requestCount.ShouldBe(3); // 1 initial attempt + 2 retries
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    public async Task AddSitecoreAuthentication_WithNonTransientError_ShouldNotRetry(HttpStatusCode nonTransientStatus)
+    {
+        var services = new ServiceCollection();
+        var requestCount = 0;
+
+        services.AddSitecoreAuthentication(
+            configureResilience: resilience =>
+            {
+                resilience.Retry.MaxRetryAttempts = 3;
+                resilience.Retry.Delay = TimeSpan.FromMilliseconds(1);
+            },
+            configureClient: builder => builder.ConfigurePrimaryHttpMessageHandler(() => new DelegateHttpMessageHandler(_ =>
+            {
+                Interlocked.Increment(ref requestCount);
+                return new HttpResponseMessage(nonTransientStatus);
+            })));
+
+        using var sp = services.BuildServiceProvider();
+        var tokenService = sp.GetRequiredService<ISitecoreTokenService>();
+
+        var ex = await Should.ThrowAsync<SitecoreAuthHttpException>(
+            () => tokenService.GetSitecoreAuthToken(new SitecoreAuthClientCredentials("id", "secret")));
+
+        ex.StatusCode.ShouldBe((int)nonTransientStatus);
+        requestCount.ShouldBe(1);
     }
 }

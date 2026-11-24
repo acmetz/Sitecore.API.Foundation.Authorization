@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <LangVersion>14.0</LangVersion>
+    <LangVersion>15.0</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>NU1603</WarningsNotAsErrors>
@@ -13,7 +13,7 @@
     <Authors>Aaron Metz</Authors>
     <Company>Open Source</Company>
     <Product>SitecoreAPIAuthorization</Product>
-    <Copyright>Copyright (c) 2025</Copyright>
+    <Copyright>Copyright (c) 2025-2026</Copyright>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</PackageProjectUrl>
     <RepositoryUrl>https://github.com/acmetz/Sitecore.API.Foundation.Authorization</RepositoryUrl>

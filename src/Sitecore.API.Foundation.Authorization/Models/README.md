@@ -3,9 +3,9 @@
 ## Overview
 
 Immutable value types exchanged across the public API: the OAuth2 client
-credentials used as the cache key, and the bearer token returned to callers.
-Both mask their secret field in `ToString()` so they are safe to pass to
-loggers.
+credentials used as part of the composite cache key, and the bearer token
+returned to callers. Both mask their secret field in `ToString()` so they are
+safe to pass to loggers.
 
 ## Interface
 
@@ -32,9 +32,11 @@ loggers.
   replaced with `***` `[SitecoreAuthClientCredentials.cs:ToString]`,
   `[SitecoreAuthToken.cs:ToString]`.
 - Both types use compiler-generated record value equality over all fields.
-  `SitecoreTokenCache` relies on this: credentials (`ClientId` +
-  `ClientSecret`) are the dictionary key, and `RemoveToken` matches tokens by
-  `AccessToken` + `Expiration`.
+  `SitecoreTokenCache` relies on this: `SitecoreTokenCacheKey(Credentials, AuthTokenUrl)`
+  pairs `SitecoreAuthClientCredentials` (`ClientId` + `ClientSecret`) with the
+  normalized endpoint URL as the dictionary key, and `RemoveToken` matches
+  tokens by `AccessToken` + `Expiration` (plus normalized `AuthTokenUrl` when
+  using the 2-arg overload).
 - `IsExpired` compares against `DateTimeOffset.UtcNow` at each read; it is not
   cached `[SitecoreAuthToken.cs:IsExpired]`.
 - `default(SitecoreAuthClientCredentials)` and `default(SitecoreAuthToken)`

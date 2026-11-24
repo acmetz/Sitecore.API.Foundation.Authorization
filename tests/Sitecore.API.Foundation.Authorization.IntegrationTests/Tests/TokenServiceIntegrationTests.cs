@@ -23,7 +23,6 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
     private readonly ITestOutputHelper _output;
     private readonly HttpClient _httpClient;
     private readonly SitecoreTokenCache _tokenCache;
-    private readonly SitecoreTokenService _tokenService;
 
     public TokenServiceIntegrationTests(KeycloakTestFixture keycloakFixture, ITestOutputHelper output)
     {
@@ -43,7 +42,6 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         });
         
         _tokenCache = new SitecoreTokenCache(options);
-        _tokenService = new SitecoreTokenService(_httpClient, _tokenCache, options);
         
         _output.WriteLine($"Keycloak Test Fixture initialized with Client ID: {_keycloakFixture.ClientId}");
     }
@@ -86,7 +84,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         });
         
         // Use a clean cache for this test so we can measure the concurrent set behaviour accurately without priming
-        var cleanCache = new SitecoreTokenCache(updatedOptions);
+        using var cleanCache = new SitecoreTokenCache(updatedOptions);
         var updatedTokenService = new SitecoreTokenService(_httpClient, cleanCache, updatedOptions);
 
         var credentials = new SitecoreAuthClientCredentials(
@@ -114,19 +112,18 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
     [Fact]
     public async Task Keycloak_container_should_be_healthy_and_accessible()
     {
+        await _keycloakFixture.EnsureInitializedAsync();
+
         // Skip this test if we're running in mock mode (Docker/Keycloak unavailable)
         if (_keycloakFixture.IsMockMode)
         {
             _output.WriteLine("Skipping health check: running in mock mode (Docker/Keycloak unavailable)");
             return;
         }
-
-        // Arrange & Act
-        await _keycloakFixture.EnsureInitializedAsync();
         
         _output.WriteLine($"Checking Keycloak health at: {_keycloakFixture.BaseUrl}");
         
-        var healthResponse = await _httpClient.GetAsync($"{_keycloakFixture.BaseUrl}/realms/{_keycloakFixture.Realm}");
+        using var healthResponse = await _httpClient.GetAsync($"{_keycloakFixture.BaseUrl}/realms/{_keycloakFixture.Realm}");
 
         // Assert
         healthResponse.IsSuccessStatusCode.ShouldBeTrue();
@@ -140,20 +137,19 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
     [Fact]
     public async Task Keycloak_should_support_standard_oauth2_discovery()
     {
+        await _keycloakFixture.EnsureInitializedAsync();
+
         // Skip this test if we're running in mock mode (Docker/Keycloak unavailable)
         if (_keycloakFixture.IsMockMode)
         {
             _output.WriteLine("Skipping discovery test: running in mock mode (Docker/Keycloak unavailable)");
             return;
         }
-
-        // Arrange & Act
-        await _keycloakFixture.EnsureInitializedAsync();
         
-    var discoveryUrl = $"{_keycloakFixture.BaseUrl}/realms/{_keycloakFixture.Realm}/.well-known/openid-configuration";
+        var discoveryUrl = $"{_keycloakFixture.BaseUrl}/realms/{_keycloakFixture.Realm}/.well-known/openid-configuration";
         _output.WriteLine($"Testing OAuth2 discovery at: {discoveryUrl}");
         
-        var discoveryResponse = await _httpClient.GetAsync(discoveryUrl);
+        using var discoveryResponse = await _httpClient.GetAsync(discoveryUrl);
 
         // Assert
         discoveryResponse.IsSuccessStatusCode.ShouldBeTrue();
@@ -214,15 +210,15 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
     [Fact]
     public async Task SitecoreTokenService_should_handle_concurrent_requests_with_keycloak()
     {
+        // Arrange
+        await _keycloakFixture.EnsureInitializedAsync();
+
         // Skip this test if we're running in mock mode (Docker/Keycloak unavailable)
         if (_keycloakFixture.IsMockMode)
         {
             _output.WriteLine("Skipping concurrent request test: running in mock mode (Docker/Keycloak unavailable)");
             return;
         }
-
-        // Arrange
-        await _keycloakFixture.EnsureInitializedAsync();
 
         // Ensure options use Keycloak TokenEndpoint directly.
         var updatedOptions = Options.Create(new SitecoreTokenServiceOptions
@@ -234,7 +230,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         });
 
         // Use a clean cache for this test so we can measure the concurrent set behaviour accurately without priming
-        var cleanCache = new SitecoreTokenCache(updatedOptions);
+        using var cleanCache = new SitecoreTokenCache(updatedOptions);
         var updatedTokenService = new SitecoreTokenService(_httpClient, cleanCache, updatedOptions);
 
         var credentials = new SitecoreAuthClientCredentials(
@@ -275,15 +271,15 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
     [Fact]
     public async Task SitecoreTokenService_should_handle_invalid_credentials_with_keycloak()
     {
+        // Arrange
+        await _keycloakFixture.EnsureInitializedAsync();
+
         // Skip this test if we're running in mock mode
         if (_keycloakFixture.IsMockMode)
         {
             _output.WriteLine("Skipping invalid credentials test: running in mock mode (Docker/Keycloak unavailable)");
             return;
         }
-
-        // Arrange
-        await _keycloakFixture.EnsureInitializedAsync();
 
         var updatedOptions = Options.Create(new SitecoreTokenServiceOptions
         {
@@ -309,15 +305,15 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
     [Fact]
     public async Task SitecoreTokenService_should_handle_token_refresh_with_keycloak()
     {
+        // Arrange
+        await _keycloakFixture.EnsureInitializedAsync();
+
         // Skip this test if we're running in mock mode
         if (_keycloakFixture.IsMockMode)
         {
             _output.WriteLine("Skipping token refresh test: running in mock mode (Docker/Keycloak unavailable)");
             return;
         }
-
-        // Arrange
-        await _keycloakFixture.EnsureInitializedAsync();
 
         var updatedOptions = Options.Create(new SitecoreTokenServiceOptions
         {
@@ -328,7 +324,7 @@ public class TokenServiceIntegrationTests : IAsyncDisposable
         });
 
         // Use a clean cache for this test so we can measure the concurrent set behaviour accurately without priming
-        var cleanCache = new SitecoreTokenCache(updatedOptions);
+        using var cleanCache = new SitecoreTokenCache(updatedOptions);
         var updatedTokenService = new SitecoreTokenService(_httpClient, cleanCache, updatedOptions);
 
         var credentials = new SitecoreAuthClientCredentials(

@@ -3,6 +3,7 @@ using System.Net.Http;
 using Microsoft.Extensions.Options;
 using Shouldly;
 using Sitecore.API.Foundation.Authorization.Configuration;
+using Sitecore.API.Foundation.Authorization.Exceptions;
 using Sitecore.API.Foundation.Authorization.IntegrationTests.Fixtures;
 using Sitecore.API.Foundation.Authorization.Models;
 using Sitecore.API.Foundation.Authorization.Services;
@@ -68,6 +69,7 @@ public class MockIntegrationTests : IAsyncDisposable
         var credentials = new SitecoreAuthClientCredentials(
             _mockFixture.ClientId, 
             _mockFixture.ClientSecret);
+        var initialRequestCount = _mockFixture.MessageHandler.RequestCount;
 
         // Act
         var authToken = await _tokenService.GetSitecoreAuthToken(credentials);
@@ -82,8 +84,8 @@ public class MockIntegrationTests : IAsyncDisposable
         authToken.AccessToken.ShouldContain(".");
         authToken.AccessToken.ShouldStartWith("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9");
         
-        // Verify the mock server received the request
-        _mockFixture.MessageHandler.RequestCount.ShouldBeGreaterThan(0);
+        // Verify the mock server received exactly one token request
+        (_mockFixture.MessageHandler.RequestCount - initialRequestCount).ShouldBe(1);
         _mockFixture.MessageHandler.LastRequest.ShouldNotBeNull();
         
         _output.WriteLine($"? SitecoreTokenService retrieved token: {authToken.AccessToken[..Math.Min(authToken.AccessToken.Length, 50)]}...");
@@ -163,13 +165,15 @@ public class MockIntegrationTests : IAsyncDisposable
         var invalidCredentials = new SitecoreAuthClientCredentials(
             "invalid-client", 
             "invalid-secret");
+        var initialRequestCount = _mockFixture.MessageHandler.RequestCount;
 
         // Act & Assert
-        var exception = await Should.ThrowAsync<Exception>(
+        var exception = await Should.ThrowAsync<SitecoreAuthHttpException>(
             () => _tokenService.GetSitecoreAuthToken(invalidCredentials));
+        exception.StatusCode.ShouldBe(401);
         
-        // Verify the mock server received and rejected the request
-        _mockFixture.MessageHandler.RequestCount.ShouldBeGreaterThan(0);
+        // Verify the mock server received and rejected the single request
+        (_mockFixture.MessageHandler.RequestCount - initialRequestCount).ShouldBe(1);
         
         _output.WriteLine($"? Correctly rejected invalid credentials: {exception.Message}");
         _output.WriteLine($"? Mock server processed {_mockFixture.MessageHandler.RequestCount} request(s)");
@@ -227,33 +231,37 @@ public class MockIntegrationTests : IAsyncDisposable
     {
         // Arrange
         await _mockFixture.EnsureInitializedAsync();
-        
-        var credentials1 = new SitecoreAuthClientCredentials(
-            _mockFixture.ClientId, 
+
+        var credentialsA = new SitecoreAuthClientCredentials(
+            $"{_mockFixture.ClientId}-a",
             _mockFixture.ClientSecret);
-            
-        var credentials2 = new SitecoreAuthClientCredentials(
-            _mockFixture.ClientId, 
-            _mockFixture.ClientSecret); // Same credentials but different instance
+        var credentialsADuplicate = new SitecoreAuthClientCredentials(
+            $"{_mockFixture.ClientId}-a",
+            _mockFixture.ClientSecret);
+        var credentialsB = new SitecoreAuthClientCredentials(
+            $"{_mockFixture.ClientId}-b",
+            _mockFixture.ClientSecret);
 
         var initialRequestCount = _mockFixture.MessageHandler.RequestCount;
 
         // Act
-        var token1 = await _tokenService.GetSitecoreAuthToken(credentials1);
-        var token2 = await _tokenService.GetSitecoreAuthToken(credentials2);
-        
+        var tokenA1 = await _tokenService.GetSitecoreAuthToken(credentialsA);
+        var tokenA2 = await _tokenService.GetSitecoreAuthToken(credentialsADuplicate);
+        var afterFirstClientRequests = _mockFixture.MessageHandler.RequestCount;
+        var tokenB = await _tokenService.GetSitecoreAuthToken(credentialsB);
+
         var finalRequestCount = _mockFixture.MessageHandler.RequestCount;
 
-        // Assert
-        token1.ShouldBe(token2); // Should be equal due to same credentials
-        token1.AccessToken.ShouldBe(token2.AccessToken);
-        
-        // Should have made only one additional HTTP request due to caching
-        var additionalRequests = finalRequestCount - initialRequestCount;
-        additionalRequests.ShouldBe(1);
-        
-        _output.WriteLine("? Same credentials (different instances) correctly use cached tokens");
-        _output.WriteLine($"? Made only {additionalRequests} additional HTTP request due to caching (total: {finalRequestCount})");
+        // Assert: equal instances share a cache entry (1 HTTP request), distinct credentials stay isolated (+1 HTTP request)
+        tokenA1.ShouldBe(tokenA2);
+        tokenA1.AccessToken.ShouldBe(tokenA2.AccessToken);
+        tokenA1.ShouldNotBe(tokenB);
+        tokenA1.AccessToken.ShouldNotBe(tokenB.AccessToken);
+
+        (afterFirstClientRequests - initialRequestCount).ShouldBe(1);
+        (finalRequestCount - initialRequestCount).ShouldBe(2);
+
+        _output.WriteLine("? Equal credentials share cache entry and distinct credentials remain isolated");
     }
 
     [Fact]
@@ -277,6 +285,7 @@ public class MockIntegrationTests : IAsyncDisposable
         
         // Step 2: Authenticate and get initial token
         _output.WriteLine("Step 2: Initial authentication");
+        var initialRequests = _mockFixture.MessageHandler.RequestCount;
         var credentials = new SitecoreAuthClientCredentials(_mockFixture.ClientId, _mockFixture.ClientSecret);
         var initialToken = await _tokenService.GetSitecoreAuthToken(credentials);
         
@@ -305,6 +314,7 @@ public class MockIntegrationTests : IAsyncDisposable
         // Step 6: Verify HTTP request efficiency
         _output.WriteLine("Step 6: Verify HTTP request efficiency");
         var totalRequests = _mockFixture.MessageHandler.RequestCount;
+        (totalRequests - initialRequests).ShouldBe(2);
         _output.WriteLine($"? Total HTTP requests made: {totalRequests}");
         
         _output.WriteLine("=== Mock Integration Test Complete ===");
@@ -327,21 +337,25 @@ public class MockIntegrationTests : IAsyncDisposable
             CleanupInterval = TimeSpan.FromMilliseconds(100)
         });
         
-        var cache = new SitecoreTokenCache(options);
+        using var cache = new SitecoreTokenCache(options);
         var service = new SitecoreTokenService(_mockFixture.HttpClient, cache, options);
         
         // Act - Add tokens beyond cache limit
-        var credentials1 = new SitecoreAuthClientCredentials("client1", _mockFixture.ClientSecret);
-        var credentials2 = new SitecoreAuthClientCredentials("client2", _mockFixture.ClientSecret);
-        var credentials3 = new SitecoreAuthClientCredentials("client3", _mockFixture.ClientSecret);
+        var credentials1 = new SitecoreAuthClientCredentials($"{_mockFixture.ClientId}-1", _mockFixture.ClientSecret);
+        var credentials2 = new SitecoreAuthClientCredentials($"{_mockFixture.ClientId}-2", _mockFixture.ClientSecret);
+        var credentials3 = new SitecoreAuthClientCredentials($"{_mockFixture.ClientId}-3", _mockFixture.ClientSecret);
         
-        // This will fail for invalid clients, but we're testing cache behavior
-        await Should.ThrowAsync<Exception>(() => service.GetSitecoreAuthToken(credentials1));
-        await Should.ThrowAsync<Exception>(() => service.GetSitecoreAuthToken(credentials2));
-        await Should.ThrowAsync<Exception>(() => service.GetSitecoreAuthToken(credentials3));
+        await service.GetSitecoreAuthToken(credentials1);
+        await Task.Delay(5);
+        await service.GetSitecoreAuthToken(credentials2);
+        await Task.Delay(5);
+        await service.GetSitecoreAuthToken(credentials3);
         
         // Assert
-        cache.CacheSize.ShouldBeLessThanOrEqualTo(2); // Should respect max cache size
+        cache.CacheSize.ShouldBe(2); // Should enforce MaxCacheSize eviction
+        cache.GetToken(credentials1).ShouldBeNull();
+        cache.GetToken(credentials2).ShouldNotBeNull();
+        cache.GetToken(credentials3).ShouldNotBeNull();
         
         _output.WriteLine($"? Cache size is properly managed: {cache.CacheSize} tokens");
         _output.WriteLine("? Cache cleanup and eviction working correctly");

@@ -1,3 +1,6 @@
+using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Configs;
+using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
 
 namespace Sitecore.API.Foundation.Authorization.Benchmarks;
@@ -8,7 +11,9 @@ public static class Program
     {
         if (args.Length == 0)
         {
-            BenchmarkRunner.Run<TokenCacheBenchmarks>();
+            var defaultConfig = ManualConfig.Create(DefaultConfig.Instance)
+                .AddJob([.. new SimpleJobAttribute(RuntimeMoniker.Net10_0).Config.GetJobs(), .. new SimpleJobAttribute(RuntimeMoniker.Net11_0).Config.GetJobs()]);
+            BenchmarkRunner.Run<TokenCacheBenchmarks>(defaultConfig);
             return;
         }
 
